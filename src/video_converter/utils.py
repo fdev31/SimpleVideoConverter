@@ -2,17 +2,13 @@ import subprocess
 from pathlib import Path
 
 from .constants import (
+    CODECS,
     CODEC_BPP_RATINGS,
-    CODEC_MAP,
-    CODEC_SPEED_FACTOR,
-    CONTAINER_DEFAULTS,
-    CONTAINER_MAP,
-    AUDIO_CODEC_MAP,
-    CQ_LEVELS,
-    HW_ENCODERS,
+    CONTAINERS,
+    AUDIO_CODECS,
+    HW_ACCEL,
     PRESET_SPEED,
     CQ_LEVEL_SPEED_FACTOR,
-    QUALITY_PRESETS,
 )
 
 
@@ -44,14 +40,17 @@ def estimate_encoding_speed(codec, preset, width, height, fps, cq_level="medium"
     Returns: (speed_factor, time_estimate_seconds, rating)
     """
     # Base speed factors
-    codec_speed = CODEC_SPEED_FACTOR.get(codec, 1.0)
+    props = get_codec_properties(codec)
+    codec_speed = props.get("speed_factor", 1.0)
     preset_speed_multiplier, _ = PRESET_SPEED.get(preset, (1.0, "Unknown"))
     cq_speed_multiplier = CQ_LEVEL_SPEED_FACTOR.get(cq_level, 1.0)
 
     # Resolution complexity (relative to 1080p)
     reference_pixels = 1920 * 1080
     current_pixels = width * height
-    resolution_factor = (current_pixels / reference_pixels) ** 1.3  # Slightly superlinear
+    resolution_factor = (
+        current_pixels / reference_pixels
+    ) ** 1.3  # Slightly superlinear
 
     # Hardware acceleration boost
     hw_boost = {
@@ -88,17 +87,16 @@ def estimate_encoding_speed(codec, preset, width, height, fps, cq_level="medium"
     return adjusted_speed, seconds_per_video_second, rating
 
 
+def get_codec_properties(codec):
+    """
+    Gets the properties for a given codec.
+    """
+    return CODECS.get(codec)
+
+
 def get_sorted_container_list():
     """Get a sorted list of unique container formats."""
-    return sorted(list(CONTAINER_MAP.keys()))
-
-
-def get_codec_name(codec_input):
-    """Convert user-friendly codec name to ffmpeg codec."""
-    if not codec_input:
-        return None
-    codec_lower = codec_input.lower()
-    return CODEC_MAP.get(codec_lower, codec_input)
+    return sorted(list(CONTAINERS.keys()))
 
 
 def get_container_name(container_input):
@@ -106,26 +104,26 @@ def get_container_name(container_input):
     if not container_input:
         return None
     container_lower = container_input.lower()
-    return CONTAINER_MAP.get(container_lower, container_input)
+    return CONTAINERS[container_lower]["ffmpeg_name"]
 
 
 def get_audio_codec_name(codec_input):
     """Convert user-friendly audio codec name to ffmpeg codec."""
     if not codec_input:
         return None
-    return AUDIO_CODEC_MAP.get(codec_input, codec_input)
+    return AUDIO_CODECS[codec_input]['name']
 
 
 def detect_codec_from_extension(ext):
     """Auto-detect codec from file extension."""
     ext_lower = ext.lower().lstrip(".")
-    return CONTAINER_DEFAULTS.get(ext_lower, "libx264")
+    return CONTAINERS.get(ext_lower, {"codec": "h264"})["codec"]
 
 
 def detect_container_from_extension(ext):
     """Auto-detect container from file extension."""
     ext_lower = ext.lower().lstrip(".")
-    return CONTAINER_MAP.get(ext_lower, "mp4")
+    return ext_lower
 
 
 def get_video_duration(input_file):
@@ -201,19 +199,10 @@ def get_hw_accels():
             if len(lines) > 1 and "Hardware acceleration methods" in lines[0]:
                 # The output can contain "----------" which we should filter out
                 accels = [line.strip() for line in lines[1:] if not line.startswith("-")]
-                return [a for a in accels if a in HW_ENCODERS]
+                return [a for a in accels if a in HW_ACCEL]
         return []
     except Exception:
         return []
-
-
-def get_file_size_mb(file_path):
-    """Get file size in MB."""
-    try:
-        size_bytes = Path(file_path).stat().st_size
-        return size_bytes / (1024 * 1024)
-    except Exception:
-        return 0.0
 
 
 def calculate_bits_per_pixel(video_bitrate_kbps, width, height, fps):
@@ -226,27 +215,14 @@ def calculate_bits_per_pixel(video_bitrate_kbps, width, height, fps):
     return bits_per_second / pixels_per_second
 
 
-def get_bpp_profile_key(encoder_name):
-    """Get the key for CODEC_BPP_RATINGS from an ffmpeg encoder name."""
-    if not encoder_name:
+def get_bpp_profile_key(codec):
+    """Get the key for CODEC_BPP_RATINGS from a codec name."""
+    if not codec:
         return None
-    if "264" in encoder_name:
-        return "h264"
-    if "265" in encoder_name or "hevc" in encoder_name:
-        return "h265"
-    if "vp9" in encoder_name:
-        return "vp9"
-    if "vp8" in encoder_name:
-        return "vp8"
-    if "av1" in encoder_name:
-        return "av1"
-    if "mpeg2" in encoder_name:
-        return "mpeg2"
-    if "theora" in encoder_name:
-        return "theora"
-    if "dirac" in encoder_name:
-        return "dirac"
-    return None
+    props = get_codec_properties(codec)
+    if not props:
+        return None
+    return props.get("family")
 
 
 def rate_quality_from_bpp(bpp, encoder_name):
@@ -312,9 +288,13 @@ def calculate_bitrate(target_size_mb, duration_seconds, audio_bitrate):
 def get_codec_options(codec, quality="balanced"):
     """Get codec-specific ffmpeg options."""
     quality_lower = quality.lower()
-    if quality_lower not in QUALITY_PRESETS:
-        quality_lower = "balanced"
-    return QUALITY_PRESETS[quality_lower].get(codec, [])
+    props = get_codec_properties(codec)
+    if not props:
+        return []
+    presets = props.get("presets")
+    if not presets:
+        return []
+    return presets.get(quality_lower, [])
 
 
 def build_ffmpeg_command(
@@ -362,30 +342,29 @@ def build_ffmpeg_command(
     if vf_options:
         cmd.extend(["-vf", ",".join(vf_options)])
 
-    # XXX: harmonize options per quality settings
+    props = get_codec_properties(codec)
+    if not props:
+        # Should not happen
+        return None
+
+    ffmpeg_codec = props.get("ffmpeg_codec")
+    if not ffmpeg_codec:
+        return None
+
     if is_cq and cq_level:
-        value = CQ_LEVELS.get(codec, {}).get(cq_level)
-        if value is not None:
-            if "nvenc" in codec:
-                cmd.extend(["-c:v", codec, "-cq", str(value)])
-            elif "qsv" in codec:
-                cmd.extend(["-c:v", codec, "-global_quality", str(value)])
-            elif "vaapi" in codec:
-                cmd.extend(["-c:v", codec, "-qp", str(value)])
-            elif codec in ["libx264", "libx265", "libvpx-vp9", "libaom-av1"]:
-                cmd.extend(["-c:v", codec, "-crf", str(value)])
-            elif codec == "mpeg4":
-                cmd.extend(["-c:v", codec, "-q:v", str(value)])
-            else:
-                cmd.extend(["-c:v", codec])
-        else:
-            cmd.extend(["-c:v", codec])
+        cq_param = props.get("cq_param")
+        cq_values = props.get("cq_levels")
+        if cq_param and cq_values:
+            value = cq_values.get(cq_level)
+            if value is not None:
+                cmd.extend([cq_param, str(value)])
+        cmd.extend(["-c:v", ffmpeg_codec])
         cmd.extend(get_codec_options(codec, quality))
     elif is_cq:
-        cmd.extend(["-c:v", codec])
+        cmd.extend(["-c:v", ffmpeg_codec])
         cmd.extend(get_codec_options(codec, quality))
     else:
-        cmd.extend(["-c:v", codec, "-b:v", f"{video_bitrate}k"])
+        cmd.extend(["-c:v", ffmpeg_codec, "-b:v", f"{video_bitrate}k"])
         if not is_vbr or pass_num is None or pass_num > 1:
             cmd.extend(["-maxrate", f"{video_bitrate}k", "-bufsize", f"{video_bitrate * 2}k"])
         cmd.extend(get_codec_options(codec, quality))

@@ -1,85 +1,120 @@
+from enum import StrEnum
+
+DEBUG = False
+
+BLOCK_SIZE = 16*16 # One block = 16x16px
+
 # User Interface constants
 POPULAR_AUDIO_BITRATES = [0, 64, 96, 128, 192, 256, 320]
 CONSTANT_QUALITY_INDEX = 4
-AUDIO_MODES = {"copy": "Original audio", "transcode": "Convert", "disable": "No sound"}
 
-# Hardware acceleration
-HW_ACCEL_DESCRIPTIONS = {
-    "cpu": "Software encoding using the CPU. High quality but can be slow.",
-    "cuda": "NVIDIA CUDA for general-purpose GPU computing.",
-    "amf": "AMF (Advanced Media Framework) for hardware acceleration on AMD GPUs.",
-    "drm": "DRM (Direct Rendering Manager) for zero-copy GPU buffer management on Linux.",
-    "vaapi": "VA-API for Linux, commonly used by Intel and AMD GPUs.",
-    "vdpau": "VDPAU for Linux, commonly used by older NVIDIA GPUs.",
-    "nvenc": "NVIDIA's hardware encoding API for faster performance.",
-    "cuvid": "NVIDIA's CUDA-based video decoding API.",
-    "qsv": "Intel Quick Sync Video for hardware acceleration on Intel CPUs.",
-    "videotoolbox": "Apple's framework for hardware acceleration on macOS.",
+
+class EncodingModes(StrEnum):
+    target_size = "Target File Size MB"
+    target_size_vbr = "Target File Size MB (VBR)"
+    cbr = "Fixed Bitrate Kbkps (CBR)"
+    vbr = "Average Bitrate Kbps (VBR)"
+    cq = "Constant Quality"
+
+
+HW_ACCEL = {
+    "cpu": {
+        "codecs": ["av1", "vp9", "h265", "h264", "mpeg4"],
+        "description": "CPU",
+    },
+    "cuda": {
+        "codecs": ["av1_nvenc", "hevc_nvenc", "h264_nvenc"],
+        "description": "NVENC (NVIDIA)",
+    },
+    "vaapi": {
+        "codecs": ["av1_vaapi", "vp9_vaapi", "hevc_vaapi", "h264_vaapi"],
+        "description": "VAAPI (Intel/AMD/Linux)",
+    },
+    # "amf": {
+    #     "codecs": ["hevc_amf", "h264_amf", "mpeg4_amf"],
+    #     "description": "AMF (AMD Advanced Media Framework)",
+    # },
+    # "qsv": {
+    #     "codecs": ["hevc_qsv", "h264_qsv", "mpeg4_qsv"],
+    #     "description": "QSV (Intel Quick Sync Video)",
+    # },
+    # "videotoolbox": {
+    #     "codecs": ["hevc_videotoolbox", "h264_videotoolbox"],
+    #     "description": "VideoToolbox (Apple macOS/iOS)",
+    # },
 }
 
-HW_ENCODERS = {
-    "cpu": ["av1", "h265", "vp9", "h264", "mpeg4"],
-    "cuda": ["av1 (nvenc)", "hevc (nvenc)", "h264 (nvenc)"],
-    "amf": ["hevc_amf", "h264_amf"],
-    "vaapi": ["hevc_vaapi", "h264_vaapi", "vp9_vaapi", "av1_vaapi", "mpeg2_vaapi"],
-    "nvenc": ["hevc_nvenc", "h264_nvenc"],
-    "qsv": ["hevc_qsv", "h264_qsv", "vp9_qsv", "av1_qsv", "mpeg2_qsv"],
-    "videotoolbox": ["hevc_videotoolbox", "h264_videotoolbox"],
+CONTAINERS = {
+    "mkv": {
+        "ffmpeg_name": "matroska",
+        "codec": "h264",
+        "descr": "Matroska Video: A flexible, open standard container that can hold a large number of video, audio, subtitle tracks.",
+    },
+    "webm": {
+        "ffmpeg_name": "webm",
+        "codec": "vp9",
+        "descr": "WebM: An open, royalty-free media file format designed for the web, based on Matroska.",
+    },
+    "mp4": {
+        "ffmpeg_name": "mp4",
+        "codec": "h264",
+        "descr": "MPEG-4 Part 14: A common container format for video, audio, and subtitles, widely supported.",
+    },
+    "m4v": {
+        "ffmpeg_name": "mp4",
+        "codec": "h264",
+        "descr": "MPEG-4 Video: Similar to MP4, often used for videos from Apple devices.",
+    },
+    "mov": {
+        "ffmpeg_name": "mov",
+        "codec": "h264",
+        "descr": "QuickTime File Format: Apple's proprietary video format.",
+    },
+    "flv": {
+        "ffmpeg_name": "flv",
+        "codec": "mpeg4",
+        "descr": "Flash Video: A container format used to deliver video over the Internet using Adobe Flash Player.",
+    },
+    "avi": {
+        "ffmpeg_name": "avi",
+        "codec": "mpeg4",
+        "descr": "Audio Video Interleave: A multimedia container format introduced by Microsoft.",
+    },
 }
 
-# Container formats
-CONTAINER_DESCRIPTIONS = {
-    "mkv": "Matroska Video: A flexible, open standard container that can hold a large number of video, audio, subtitle tracks.",
-    "webm": "WebM: An open, royalty-free media file format designed for the web, based on Matroska.",
-    "mp4": "MPEG-4 Part 14: A common container format for video, audio, and subtitles, widely supported.",
-    "m4v": "MPEG-4 Video: Similar to MP4, often used for videos from Apple devices.",
-    "mov": "QuickTime File Format: Apple's proprietary video format.",
-    "flv": "Flash Video: A container format used to deliver video over the Internet using Adobe Flash Player.",
-    "avi": "Audio Video Interleave: A multimedia container format introduced by Microsoft.",
-    "auto": "Automatically detect container based on output file extension.",
-}
-
-# Video codecs
-CODEC_DESCRIPTIONS = {
-    "av1": "AV1: Royalty-free, next-generation video coding format. Excellent compression, but slow encoding.",
-    "h265": "H.265/HEVC: High Efficiency Video Coding. Successor to H.264, offers better compression.",
-    "vp9": "VP9: Royalty-free video coding format developed by Google. Good for web streaming.",
-    "h264": "H.264/AVC: Advanced Video Coding. Widely used, good balance of compression and compatibility.",
-    "mpeg4": "MPEG-4 Part 2: Older video codec, less efficient than H.264/H.265.",
-    # Hardware encoders
-    "av1_nvenc": "NVIDIA NVENC AV1 encoder. Fast, hardware-accelerated AV1 encoding.",
-    "h264_nvenc": "NVIDIA NVENC H.264 encoder. Fast, hardware-accelerated H.264 encoding.",
-    "hevc_nvenc": "NVIDIA NVENC HEVC encoder. Fast, hardware-accelerated H.265 encoding.",
-    "h264_vaapi": "VA-API H.264 encoder. Hardware-accelerated H.264 encoding for VA-API compatible GPUs.",
-    "hevc_vaapi": "VA-API HEVC encoder. Hardware-accelerated H.265 encoding for VA-API compatible GPUs.",
-    "vp9_vaapi": "VA-API VP9 encoder. Hardware-accelerated VP9 encoding for VA-API compatible GPUs.",
-    "av1_vaapi": "VA-API AV1 encoder. Hardware-accelerated AV1 encoding for VA-API compatible GPUs.",
-    "mpeg2_vaapi": "VA-API MPEG2 encoder. Hardware-accelerated MPEG2 encoding for VA-API compatible GPUs.",
-    "h264_qsv": "Intel QSV H.264 encoder. Fast, hardware-accelerated H.264 encoding for Intel Quick Sync Video.",
-    "hevc_qsv": "Intel QSV HEVC encoder. Fast, hardware-accelerated H.265 encoding for Intel Quick Sync Video.",
-    "vp9_qsv": "Intel QSV VP9 encoder. Hardware-accelerated VP9 encoding for Intel Quick Sync Video.",
-    "av1_qsv": "Intel QSV AV1 encoder. Hardware-accelerated AV1 encoding for Intel Quick Sync Video.",
-    "mpeg2_qsv": "Intel QSV MPEG2 encoder. Hardware-accelerated MPEG2 encoding for Intel Quick Sync Video.",
-    "h264_videotoolbox": "Apple VideoToolbox H.264 encoder. Hardware-accelerated H.264 encoding for macOS.",
-    "hevc_videotoolbox": "Apple VideoToolbox HEVC encoder. Hardware-accelerated H.265 encoding for macOS.",
-    "h264_amf": "AMD AMF H.264 encoder. Hardware-accelerated H.264 encoding for AMD GPUs.",
-    "hevc_amf": "AMD AMF HEVC encoder. Hardware-accelerated H.265 encoding for AMD GPUs.",
-    "av1_cuvid": "NVIDIA CUVID AV1 encoder. Fast, hardware-accelerated AV1 encoding.",
-    "hevc_cuvid": "NVIDIA CUVID H.265 encoder. Fast, hardware-accelerated H.265 encoding.",
-    "h264_cuvid": "NVIDIA CUVID H.264 encoder. Fast, hardware-accelerated H.264 encoding.",
-    "auto": "Automatically detect codec based on output container.",
-}
 
 # Audio codecs
-AUDIO_CODEC_DESCRIPTIONS = {
-    "Opus": "Opus: Highly versatile, open-source audio codec for interactive speech and music.",
-    "FLAC": "FLAC: Free Lossless Audio Codec. For high-quality, lossless audio.",
-    "ALAC": "ALAC: Apple Lossless Audio Codec. Lossless audio compression developed by Apple.",
-    "AAC": "AAC: Advanced Audio Coding. Efficient, widely supported lossy audio compression.",
-    "Vorbis": "Vorbis: Open-source, lossy audio compression format.",
-    "AC3": "AC3: Dolby Digital. Lossy audio compression, commonly used in DVDs and Blu-rays.",
-    "MP3": "MP3: MPEG-1 Audio Layer III. Widely used lossy audio compression.",
+AUDIO_CODECS = {
+    "Opus": {
+        "descr": "Opus: Highly versatile, open-source audio codec for interactive speech and music.",
+        "name": "libopus",
+    },
+    "FLAC": {
+        "descr": "FLAC: Free Lossless Audio Codec. For high-quality, lossless audio.",
+        "name": "flac",
+    },
+    "ALAC": {
+        "descr": "ALAC: Apple Lossless Audio Codec. Lossless audio compression developed by Apple.",
+        "name": "alac",
+    },
+    "AAC": {
+        "descr": "AAC: Advanced Audio Coding. Efficient, widely supported lossy audio compression.",
+        "name": "aac",
+    },
+    "Vorbis": {
+        "descr": "Vorbis: Open-source, lossy audio compression format.",
+        "name": "libvorbis",
+    },
+    "AC3": {
+        "descr": "AC3: Dolby Digital. Lossy audio compression, commonly used in DVDs and Blu-rays.",
+        "name": "ac3",
+    },
+    "MP3": {
+        "descr": "MP3: MPEG-1 Audio Layer III. Widely used lossy audio compression.",
+        "name": "libmp3lame",
+    },
 }
+
 
 # Codec performance data
 CODEC_BPP_RATINGS = {
@@ -141,46 +176,6 @@ CODEC_BPP_RATINGS = {
     },
 }
 
-CODEC_SPEED_FACTOR = {
-    # Software encoders (CPU)
-    "libx264": 1.0,
-    "h264": 1.0,
-    "libx265": 0.15,
-    "h265": 0.15,
-    "libvpx-vp9": 0.10,
-    "vp9": 0.10,
-    "libaom-av1": 0.03,
-    "av1": 0.03,
-    "mpeg4": 1.5,
-    # NVIDIA NVENC (hardware)
-    "h264_nvenc": 15.0,
-    "hevc_nvenc": 8.0,
-    "av1_nvenc": 9.0,
-    "h264_cuvid": 15.0,
-    "hevc_cuvid": 8.0,
-    "av1_cuvid": 9.0,
-    # Intel Quick Sync Video (QSV)
-    "h264_qsv": 18.0,
-    "hevc_qsv": 10.0,
-    "vp9_qsv": 6.0,
-    "av1_qsv": 6.0,
-    "mpeg2_qsv": 20.0,
-    # AMD AMF (hardware)
-    "h264_amf": 12.0,
-    "hevc_amf": 6.0,
-    # Apple VideoToolbox (hardware)
-    "h264_videotoolbox": 10.0,
-    "hevc_videotoolbox": 6.0,
-    # VA-API (Linux GPU hardware)
-    "h264_vaapi": 12.0,
-    "hevc_vaapi": 6.0,
-    "vp9_vaapi": 6.0,
-    "av1_vaapi": 4.0,
-    "mpeg2_vaapi": 20.0,
-    # Other/automatic
-    "auto": 1.0,
-}
-
 PRESET_SPEED = {
     "ultrafast": (5.0, "Ultrafast"),
     "medium": (1.0, "Medium"),
@@ -197,127 +192,350 @@ CQ_LEVEL_SPEED_FACTOR = {
     "lossless": 0.7,
 }
 
-# Codec and container mappings
-CODEC_MAP = {
-    "av1": "libaom-av1",
-    "h265": "libx265",
-    "hevc": "libx265",
-    "vp9": "libvpx-vp9",
-    "h264": "libx264",
-    "x264": "libx264",
-    "mpeg4": "mpeg4",
-    "av1 (nvenc)": "av1_nvenc",
-    "hevc (nvenc)": "hevc_nvenc",
-    "h264 (nvenc)": "h264_nvenc",
+
+# Codec-specific properties
+CQ_LEVELS_H264 = {
+    "lossless": 0,
+    "very-high": 18,
+    "high": 20,
+    "medium": 23,
+    "low": 26,
+    "lowest": 30,
 }
 
-CONTAINER_MAP = {
-    "mkv": "matroska",
-    "webm": "webm",
-    "mp4": "mp4",
-    "m4v": "mp4",
-    "mov": "mov",
-    "flv": "flv",
-    "avi": "avi",
+CQ_LEVELS_H265 = {
+    "lossless": 17,
+    "very-high": 22,
+    "high": 24,
+    "medium": 28,
+    "low": 32,
+    "lowest": 37,
 }
 
-AUDIO_CODEC_MAP = {
-    "Opus": "libopus",
-    "FLAC": "flac",
-    "ALAC": "alac",
-    "AAC": "aac",
-    "Vorbis": "libvorbis",
-    "AC3": "ac3",
-    "MP3": "libmp3lame",
+CQ_LEVELS_AV1_VP9 = {
+    "lossless": 0,
+    "very-high": 20,
+    "high": 25,
+    "medium": 31,
+    "low": 37,
+    "lowest": 45,
 }
 
-CONTAINER_DEFAULTS = {
-    "mp4": "libx264",
-    "m4v": "libx264",
-    "mkv": "libx264",
-    "webm": "libvpx-vp9",
-    "avi": "mpeg4",
-    "mov": "libx264",
-    "flv": "mpeg4",
+CQ_LEVELS_MPEG4 = {
+    "lossless": 1,
+    "very-high": 2,
+    "high": 3,
+    "medium": 5,
+    "low": 7,
+    "lowest": 10,
 }
 
-# FFmpeg quality presets
-QUALITY_PRESETS = {
-    "ultrafast": {
-        "libx264": ["-preset", "ultrafast", "-profile:v", "high", "-level", "4.1"],
-        "libx265": ["-preset", "ultrafast", "-x265-params", "log-level=error"],
-        "libvpx-vp9": ["-deadline", "realtime", "-cpu-used", "8", "-row-mt", "1"],
-        "libaom-av1": ["-cpu-used", "8", "-row-mt", "1"],
-        "mpeg4": ["-q:v", "8"],
-        "h264_nvenc": ["-preset", "p1", "-tune", "hq", "-profile:v", "high"],
-        "hevc_nvenc": ["-preset", "p1", "-tune", "hq"],
-        "av1_nvenc": ["-preset", "p1", "-tune", "hq"],
-        "h264_qsv": ["-preset", "veryfast"],
-        "hevc_qsv": ["-preset", "veryfast"],
-        "h264_amf": ["-usage", "speed"],
-        "hevc_amf": ["-usage", "speed"],
-        "h264_vaapi": ["-compression_level", "0"],
-        "hevc_vaapi": ["-compression_level", "0"],
+# Hardware-accelerated variants use QP instead of CRF and don't support lossless
+CQ_LEVELS_H264_HW = {
+    "lossless": None,
+    "very-high": 18,
+    "high": 20,
+    "medium": 23,
+    "low": 26,
+    "lowest": 30,
+}
+
+CQ_LEVELS_H265_HW = {
+    "lossless": None,
+    "very-high": 20,
+    "high": 22,
+    "medium": 25,
+    "low": 28,
+    "lowest": 32,
+}
+
+CQ_LEVELS_AV1_VP9_HW = {
+    "lossless": None,
+    "very-high": 20,
+    "high": 25,
+    "medium": 31,
+    "low": 37,
+    "lowest": 45,
+}
+
+# Common preset patterns
+VAAPI_COMPRESSION_PRESETS = {
+    "ultrafast": ["-compression_level", "0"],
+    "medium": ["-compression_level", "4"],
+    "slow": ["-compression_level", "7"],
+    "veryslow": ["-compression_level", "9"],
+}
+
+NVENC_H264_PRESETS = {
+    "ultrafast": ["-preset", "p1", "-tune", "hq", "-profile:v", "high"],
+    "medium": ["-preset", "p4", "-tune", "hq", "-profile:v", "high"],
+    "slow": ["-preset", "p6", "-tune", "hq", "-profile:v", "high"],
+    "veryslow": ["-preset", "p7", "-tune", "hq", "-profile:v", "high"],
+}
+
+NVENC_HEVC_AV1_PRESETS = {
+    "ultrafast": ["-preset", "p1", "-tune", "hq"],
+    "medium": ["-preset", "p4", "-tune", "hq"],
+    "slow": ["-preset", "p6", "-tune", "hq"],
+    "veryslow": ["-preset", "p7", "-tune", "hq"],
+}
+
+CODECS = {
+    "h264": {
+        "ffmpeg_codec": "libx264",
+        "name": "H.264 (libx264)",
+        "description": "H.264/AVC: Advanced Video Coding. Widely used, good balance of compression and compatibility.",
+        "family": "h264",
+        "cq_param": "-crf",
+        "speed_factor": 1.0,
+        "cq_levels": CQ_LEVELS_H264,
+        "presets": {
+            "ultrafast": ["-preset", "ultrafast", "-profile:v", "high", "-level", "4.1"],
+            "medium": ["-preset", "medium", "-profile:v", "high", "-level", "4.1"],
+            "slow": ["-preset", "slow", "-profile:v", "high", "-level", "4.1"],
+            "veryslow": ["-preset", "veryslow", "-profile:v", "high", "-level", "4.1"],
+        },
     },
-    "medium": {
-        "libx264": ["-preset", "medium", "-profile:v", "high", "-level", "4.1"],
-        "libx265": ["-preset", "medium", "-x265-params", "log-level=error"],
-        "libvpx-vp9": ["-deadline", "good", "-cpu-used", "4", "-row-mt", "1"],
-        "libaom-av1": ["-cpu-used", "6", "-row-mt", "1"],
-        "mpeg4": ["-q:v", "5"],
-        "h264_nvenc": ["-preset", "p4", "-tune", "hq", "-profile:v", "high"],
-        "hevc_nvenc": ["-preset", "p4", "-tune", "hq"],
-        "av1_nvenc": ["-preset", "p4", "-tune", "hq"],
-        "h264_qsv": ["-preset", "medium"],
-        "hevc_qsv": ["-preset", "medium"],
-        "h264_amf": ["-usage", "balanced"],
-        "hevc_amf": ["-usage", "balanced"],
-        "h264_vaapi": ["-compression_level", "4"],
-        "hevc_vaapi": ["-compression_level", "4"],
+    "h265": {
+        "ffmpeg_codec": "libx265",
+        "name": "H.265 (libx265)",
+        "description": "H.265/HEVC: High Efficiency Video Coding. Successor to H.264, offers better compression.",
+        "family": "h265",
+        "cq_param": "-crf",
+        "speed_factor": 0.15,
+        "cq_levels": CQ_LEVELS_H265,
+        "presets": {
+            "ultrafast": ["-preset", "ultrafast", "-x265-params", "log-level=error"],
+            "medium": ["-preset", "medium", "-x265-params", "log-level=error"],
+            "slow": ["-preset", "slow", "-x265-params", "log-level=error"],
+            "veryslow": ["-preset", "veryslow", "-x265-params", "log-level=error"],
+        },
     },
-    "slow": {
-        "libx264": ["-preset", "slow", "-profile:v", "high", "-level", "4.1"],
-        "libx265": ["-preset", "slow", "-x265-params", "log-level=error"],
-        "libvpx-vp9": ["-deadline", "good", "-cpu-used", "2", "-row-mt", "1"],
-        "libaom-av1": ["-cpu-used", "4", "-row-mt", "1"],
-        "mpeg4": ["-q:v", "3"],
-        "h264_nvenc": ["-preset", "p6", "-tune", "hq", "-profile:v", "high"],
-        "hevc_nvenc": ["-preset", "p6", "-tune", "hq"],
-        "av1_nvenc": ["-preset", "p6", "-tune", "hq"],
-        "h264_qsv": ["-preset", "slow"],
-        "hevc_qsv": ["-preset", "slow"],
-        "h264_amf": ["-usage", "quality"],
-        "hevc_amf": ["-usage", "quality"],
-        "h264_vaapi": ["-compression_level", "7"],
-        "hevc_vaapi": ["-compression_level", "7"],
+    "av1": {
+        "ffmpeg_codec": "libaom-av1",
+        "name": "AV1 (libaom)",
+        "description": "AV1: Royalty-free, next-generation video coding format. Excellent compression, but slow encoding.",
+        "family": "av1",
+        "cq_param": "-crf",
+        "speed_factor": 0.03,
+        "cq_levels": CQ_LEVELS_AV1_VP9,
+        "presets": {
+            "ultrafast": ["-cpu-used", "8", "-row-mt", "1"],
+            "medium": ["-cpu-used", "6", "-row-mt", "1"],
+            "slow": ["-cpu-used", "4", "-row-mt", "1"],
+            "veryslow": ["-cpu-used", "2", "-row-mt", "1"],
+        },
     },
-    "veryslow": {
-        "libx264": ["-preset", "veryslow", "-profile:v", "high", "-level", "4.1"],
-        "libx265": ["-preset", "veryslow", "-x265-params", "log-level=error"],
-        "libvpx-vp9": ["-deadline", "best", "-cpu-used", "1", "-row-mt", "1"],
-        "libaom-av1": ["-cpu-used", "2", "-row-mt", "1"],
-        "mpeg4": ["-q:v", "2"],
-        "h264_nvenc": ["-preset", "p7", "-tune", "hq", "-profile:v", "high"],
-        "hevc_nvenc": ["-preset", "p7", "-tune", "hq"],
-        "av1_nvenc": ["-preset", "p7", "-tune", "hq"],
-        "h264_qsv": ["-preset", "veryslow"],
-        "hevc_qsv": ["-preset", "veryslow"],
-        "h264_amf": ["-usage", "quality"],
-        "hevc_amf": ["-usage", "quality"],
-        "h264_vaapi": ["-compression_level", "9"],
-        "hevc_vaapi": ["-compression_level", "9"],
+    "vp9": {
+        "ffmpeg_codec": "libvpx-vp9",
+        "name": "VP9 (libvpx)",
+        "description": "VP9: Royalty-free video coding format developed by Google. Good for web streaming.",
+        "family": "vp9",
+        "cq_param": "-crf",
+        "speed_factor": 0.10,
+        "cq_levels": CQ_LEVELS_AV1_VP9,
+        "presets": {
+            "ultrafast": ["-deadline", "realtime", "-cpu-used", "8", "-row-mt", "1"],
+            "medium": ["-deadline", "good", "-cpu-used", "4", "-row-mt", "1"],
+            "slow": ["-deadline", "good", "-cpu-used", "2", "-row-mt", "1"],
+            "veryslow": ["-deadline", "best", "-cpu-used", "1", "-row-mt", "1"],
+        },
     },
-}
-
-CQ_LEVELS = {
-    "libx264": {"lossless": 0, "very-high": 18, "high": 20, "medium": 23, "low": 26, "lowest": 30},
-    "libx265": {"lossless": 17, "very-high": 22, "high": 24, "medium": 28, "low": 32, "lowest": 37},
-    "libvpx-vp9": {"lossless": 0, "very-high": 20, "high": 25, "medium": 31, "low": 37, "lowest": 45},
-    "libaom-av1": {"lossless": 0, "very-high": 20, "high": 25, "medium": 31, "low": 37, "lowest": 45},
-    "mpeg4": {"lossless": 1, "very-high": 2, "high": 3, "medium": 5, "low": 7, "lowest": 10},
-    "h264_nvenc": {"lossless": 0, "very-high": 18, "high": 20, "medium": 23, "low": 26, "lowest": 30},
-    "hevc_nvenc": {"lossless": 0, "very-high": 20, "high": 22, "medium": 25, "low": 28, "lowest": 32},
-    "av1_nvenc": {"lossless": 0, "very-high": 20, "high": 22, "medium": 25, "low": 28, "lowest": 32},
+    "mpeg4": {
+        "ffmpeg_codec": "mpeg4",
+        "name": "MPEG-4",
+        "description": "MPEG-4 Part 2: Older video codec, less efficient than H.264/H.265.",
+        "family": "mpeg4",
+        "cq_param": "-qscale:v",
+        "speed_factor": 1.5,
+        "cq_levels": CQ_LEVELS_MPEG4,
+        "presets": {
+            "ultrafast": ["-q:v", "8"],
+            "medium": ["-q:v", "5"],
+            "slow": ["-q:v", "3"],
+            "veryslow": ["-q:v", "2"],
+        },
+    },
+    "h264_vaapi": {
+        "ffmpeg_codec": "h264_vaapi",
+        "name": "H.264 (VAAPI)",
+        "description": "Intel/AMD VAAPI hardware encoder (Linux).",
+        "family": "h264",
+        "cq_param": "-qp",
+        "speed_factor": 0.03,
+        "cq_levels": CQ_LEVELS_H264_HW,
+        "presets": {
+            "ultrafast": ["-compression_level", "2"],
+            "medium": ["-compression_level", "4"],
+            "slow": ["-compression_level", "6"],
+            "veryslow": ["-compression_level", "8"],
+        },
+    },
+    "hevc_vaapi": {
+        "ffmpeg_codec": "hevc_vaapi",
+        "name": "HEVC (VAAPI)",
+        "description": "Intel/AMD VAAPI HEVC encoder (Linux).",
+        "family": "hevc",
+        "cq_param": "-qp",
+        "speed_factor": 0.02,
+        "cq_levels": CQ_LEVELS_H265_HW,
+        "presets": {
+            "ultrafast": ["-compression_level", "2"],
+            "medium": ["-compression_level", "4"],
+            "slow": ["-compression_level", "6"],
+            "veryslow": ["-compression_level", "8"],
+        },
+    },
+    "vp9_vaapi": {
+        "ffmpeg_codec": "vp9_vaapi",
+        "name": "VP9 (VA-API)",
+        "description": "VA-API VP9 encoder. Hardware-accelerated VP9 encoding for VA-API compatible GPUs.",
+        "family": "vp9",
+        "cq_param": "-qp",
+        "speed_factor": 6.0,
+        "cq_levels": CQ_LEVELS_AV1_VP9_HW,
+        "presets": None,
+    },
+    "av1_vaapi": {
+        "ffmpeg_codec": "av1_vaapi",
+        "name": "AV1 (VA-API)",
+        "description": "VA-API AV1 encoder. Hardware-accelerated AV1 encoding for VA-API compatible GPUs.",
+        "family": "av1",
+        "cq_param": "-qp",
+        "speed_factor": 4.0,
+        "cq_levels": CQ_LEVELS_AV1_VP9_HW,
+        "presets": None,
+    },
+    "h264_nvenc": {
+        "ffmpeg_codec": "h264_nvenc",
+        "name": "H.264 (NVENC)",
+        "description": "NVIDIA H.264 hardware encoder. Fast, suitable for gaming/streaming.",
+        "family": "h264",
+        "cq_param": "-cq",
+        "speed_factor": 0.02,
+        "cq_levels": CQ_LEVELS_H264_HW,
+        "presets": {
+            "ultrafast": ["-preset", "fast"],
+            "medium": ["-preset", "medium"],
+            "slow": ["-preset", "slow"],
+            "veryslow": ["-preset", "slow", "-profile:v", "high"],
+        },
+    },
+    "hevc_nvenc": {
+        "ffmpeg_codec": "hevc_nvenc",
+        "name": "H.265/HEVC (NVENC)",
+        "description": "NVIDIA HEVC encoder: Efficient compression, newer GPUs recommended.",
+        "family": "hevc",
+        "cq_param": "-cq",
+        "speed_factor": 0.012,
+        "cq_levels": CQ_LEVELS_H265_HW,
+        "presets": {
+            "ultrafast": ["-preset", "fast"],
+            "medium": ["-preset", "medium"],
+            "slow": ["-preset", "slow"],
+            "veryslow": ["-preset", "slow", "-profile:v", "main"],
+        },
+    },
+    "av1_nvenc": {
+        "ffmpeg_codec": "av1_nvenc",
+        "name": "AV1 (NVENC)",
+        "description": "NVIDIA NVENC AV1 encoder. Fast, hardware-accelerated AV1 encoding.",
+        "family": "av1",
+        "cq_param": "-cq",
+        "speed_factor": 9.0,
+        "cq_levels": CQ_LEVELS_H265_HW, # Note: Using H265 levels as an approximation
+        "presets": NVENC_HEVC_AV1_PRESETS,
+    },
+    "h264_amf": {
+        "ffmpeg_codec": "h264_amf",
+        "name": "H.264 (AMF)",
+        "description": "AMD Advanced Media Framework hardware encoder.",
+        "family": "h264",
+        "cq_param": "-qp",
+        "speed_factor": 0.019,
+        "cq_levels": CQ_LEVELS_H264_HW,
+        "presets": {
+            "ultrafast": ["-quality", "speed"],
+            "medium": ["-quality", "balanced"],
+            "slow": ["-quality", "quality"],
+            "veryslow": ["-quality", "quality", "-profile:v", "high"],
+        },
+    },
+    "hevc_amf": {
+        "ffmpeg_codec": "hevc_amf",
+        "name": "HEVC (AMF)",
+        "description": "AMD HEVC encoder (AMF). Efficient, modern AMD GPUs.",
+        "family": "hevc",
+        "cq_param": "-qp",
+        "speed_factor": 0.017,
+        "cq_levels": CQ_LEVELS_H265_HW,
+        "presets": {
+            "ultrafast": ["-quality", "speed"],
+            "medium": ["-quality", "balanced"],
+            "slow": ["-quality", "quality"],
+            "veryslow": ["-quality", "quality", "-profile:v", "main"],
+        },
+    },
+    "h264_qsv": {
+        "ffmpeg_codec": "h264_qsv",
+        "name": "H.264 (QSV)",
+        "description": "Intel Quick Sync hardware encoder.",
+        "family": "h264",
+        "cq_param": "-global_quality",
+        "speed_factor": 0.015,
+        "cq_levels": CQ_LEVELS_H264_HW,
+        "presets": {
+            "ultrafast": ["-preset", "fast"],
+            "medium": ["-preset", "medium"],
+            "slow": ["-preset", "slow"],
+            "veryslow": ["-preset", "veryslow"],
+        },
+    },
+    "hevc_qsv": {
+        "ffmpeg_codec": "hevc_qsv",
+        "name": "HEVC (QSV)",
+        "description": "Intel Quick Sync HEVC encoder.",
+        "family": "hevc",
+        "cq_param": "-global_quality",
+        "speed_factor": 0.013,
+        "cq_levels": CQ_LEVELS_H265_HW,
+        "presets": {
+            "ultrafast": ["-preset", "fast"],
+            "medium": ["-preset", "medium"],
+            "slow": ["-preset", "slow"],
+            "veryslow": ["-preset", "veryslow"],
+        },
+    },
+    "h264_videotoolbox": {
+        "ffmpeg_codec": "h264_videotoolbox",
+        "name": "H.264 (VideoToolbox)",
+        "description": "Apple hardware encoder (macOS/iOS).",
+        "family": "h264",
+        "cq_param": "-quality",
+        "speed_factor": 0.016,
+        "cq_levels": { "low": 25, "medium": 50, "high": 75, "lossless": 100 },
+        "presets": {
+            "ultrafast": ["-speed", "fast"],
+            "medium": ["-speed", "medium"],
+            "slow": ["-speed", "slow"],
+            "veryslow": ["-speed", "slow", "-profile:v", "high"],
+        },
+    },
+    "hevc_videotoolbox": {
+        "ffmpeg_codec": "hevc_videotoolbox",
+        "name": "HEVC (VideoToolbox)",
+        "description": "Apple hardware HEVC encoder (macOS/iOS).",
+        "family": "hevc",
+        "cq_param": "-quality",
+        "speed_factor": 0.012,
+        "cq_levels": { "low": 25, "medium": 50, "high": 75, "lossless": 100 },
+        "presets": {
+            "ultrafast": ["-speed", "fast"],
+            "medium": ["-speed", "medium"],
+            "slow": ["-speed", "slow"],
+            "veryslow": ["-speed", "slow", "-profile:v", "main"],
+        },
+    },
 }
 
 # Miscellaneous

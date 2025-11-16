@@ -9,36 +9,37 @@ import threading
 import time
 from pathlib import Path
 
-from gi.repository import Adw, Gdk, GLib, Gtk
+from gi.repository import Adw, Gdk, GLib, Gtk, GObject, Gio
 
-from .widgets import (
-    AudioBitrateScale,
-    HintsLabel,
-    PassesSlider,
-    ScalingFactorScale,
-)
 from ..constants import (
-    AUDIO_CODEC_DESCRIPTIONS,
-    AUDIO_CODEC_MAP,
-    CODEC_DESCRIPTIONS,
+    AUDIO_CODECS,
+    CODECS,
     CONSTANT_QUALITY_INDEX,
-    CONTAINER_DESCRIPTIONS,
-    HW_ACCEL_DESCRIPTIONS,
-    HW_ENCODERS,
+    CONTAINERS,
+    HW_ACCEL,
+    EncodingModes,
 )
+from ..models import get_ItemList, ListItem
 from ..utils import (
     build_ffmpeg_command,
     calculate_bitrate,
+    detect_codec_from_extension,
     detect_container_from_extension,
     detect_hardware_acceleration,
     format_file_size,
     get_audio_codec_name,
-    get_codec_name,
+    get_codec_properties,
     get_container_name,
     get_hw_accels,
     get_sorted_container_list,
     get_video_duration,
     get_video_properties,
+)
+from .widgets import (
+    AudioBitrateScale,
+    HintsLabel,
+    PassesSlider,
+    ScalingFactorScale,
 )
 
 
@@ -53,7 +54,7 @@ class VideoConverterWindow(Adw.ApplicationWindow):
         self.encoding_process = None
         self.progress_updater = None
         self.estimated_size_bytes = 0
-        self.mode_keys = ["target-size", "target-size-vbr", "cbr", "vbr", "cq"]
+        self.mode_keys = list([e.name for e in EncodingModes])
         self.updating_ui = False
 
         # Store video properties for calculations
@@ -62,10 +63,12 @@ class VideoConverterWindow(Adw.ApplicationWindow):
         self.video_fps = 24.0
         self.video_duration = 30.0
 
+        self.input_file = Path("./Input.mp4")
+        self.output_file = Path("./tmp/output.mp4")
+
         # Main container
         main_container = Gtk.Box(orientation=Gtk.Orientation.VERTICAL)
 
-        # ViewStack and ViewSwitcher
         # ViewStack and ViewSwitcher
         self.view_stack = Adw.ViewStack()
         self.view_stack.set_vexpand(True)
@@ -98,11 +101,13 @@ class VideoConverterWindow(Adw.ApplicationWindow):
         settings_box.set_margin_start(12)
         settings_box.set_margin_end(12)
 
-        # Files section
-        files_group = Adw.PreferencesGroup(title="Files")
+        # # Files section
+        files_group = Adw.PreferencesGroup(title="General")
         settings_box.append(files_group)
 
-        self.input_row = Adw.ActionRow(title="Input Video", subtitle="No file selected")
+        self.input_row = Adw.ActionRow(
+            title="Video to convert", subtitle="No file selected"
+        )
         self.input_row.add_prefix(
             Gtk.Image.new_from_icon_name("video-x-generic-symbolic")
         )
@@ -116,7 +121,7 @@ class VideoConverterWindow(Adw.ApplicationWindow):
         files_group.add(self.input_row)
 
         self.output_row = Adw.ActionRow(
-            title="Output Video", subtitle="No file selected"
+            title="Output File", subtitle="No file selected"
         )
         self.output_row.add_prefix(
             Gtk.Image.new_from_icon_name("media-floppy-symbolic")
@@ -132,26 +137,84 @@ class VideoConverterWindow(Adw.ApplicationWindow):
         self.output_row.set_activatable_widget(output_browse_button)
         files_group.add(self.output_row)
 
+        # Encoding section
+        encoding_mode_action_row = Adw.ActionRow(title="Encoding Mode")
+        files_group.add(encoding_mode_action_row)
+
+        self.scale_factor_scale = ScalingFactorScale()
+        self.scale_factor_scale.scale.connect("value-changed", self._on_settings_changed)
+        files_group.add(self.scale_factor_scale)
+
         # Hints label (quality/speed)
         self.hints_label = HintsLabel()
-        hints_row = Adw.PreferencesRow()
-        hints_row.set_child(self.hints_label)
-        files_group.add(hints_row)
+        debug_hints = Adw.PreferencesRow()
+        debug_hints.set_child(self.hints_label)
+        files_group.add(debug_hints)
+
+        controls_box = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL, spacing=12)
+        encoding_mode_action_row.add_suffix(controls_box)
+
+        mode_model = Gtk.StringList.new([e.value for e in EncodingModes])
+        self.mode_combo = Gtk.DropDown.new(mode_model, None)
+        self.mode_combo.set_tooltip_text(
+            "Select the encoding mode. This determines how the bitrate is controlled."
+        )
+        self.mode_combo.set_selected(CONSTANT_QUALITY_INDEX)
+        self.mode_combo.connect("notify::selected-item", self.on_mode_changed)
+        controls_box.append(self.mode_combo)
+
+        self.mode_settings_stack = Gtk.Stack()
+        self.mode_settings_stack.set_hexpand(True)
+        controls_box.append(self.mode_settings_stack)
+
+        self.target_size_adjustment = Gtk.Adjustment.new(50, 1, 100000, 1, 10, 0)
+        self.target_size_entry = Gtk.SpinButton(adjustment=self.target_size_adjustment, digits=0)
+        self.target_size_entry.set_tooltip_text(
+            "Set the desired output file size in megabytes (MB). The video bitrate will be calculated automatically."
+        )
+        self.target_size_entry.connect("value-changed", self._on_settings_changed)
+        self.mode_settings_stack.add_titled(
+            self.target_size_entry, "target_size", "Target Size"
+        )
+
+        self.bitrate_adjustment = Gtk.Adjustment.new(1000, 1, 500000, 1, 100, 0)
+        self.bitrate_entry = Gtk.SpinButton(adjustment=self.bitrate_adjustment, digits=0)
+        self.bitrate_entry.set_tooltip_text(
+            "Set a fixed or average video bitrate in kilobits per second (kbps)."
+        )
+        self.bitrate_entry.connect("value-changed", self._on_settings_changed)
+        self.mode_settings_stack.add_titled(self.bitrate_entry, "bitrate", "Bitrate")
+
+        cq_model = Gtk.StringList.new(
+            ["lowest", "low", "medium", "high", "very-high", "lossless"]
+        )
+        self.cq_combo = Gtk.DropDown.new(cq_model, None)
+        self.cq_combo.set_tooltip_text(
+            "Constant Quality (CRF/QP). Lower values mean higher quality and larger file size. 'medium' is a good starting point."
+        )
+        self.cq_combo.set_selected(1)
+        self.cq_combo.connect("notify::selected-item", self._on_settings_changed)
+        self.mode_settings_stack.add_titled(
+            self.cq_combo, "cq", "Quality Level"
+        )
+
+
 
         # Format & Quality section
         format_group = Adw.PreferencesGroup()
         format_expander = Adw.ExpanderRow(
-            title="Encoder: Format and Codec",
+            title="Encoder",
             expanded=True,
             icon_name="video-x-generic-symbolic",
         )
+        format_expander.set_expanded(False)
         format_group.add(format_expander)
         settings_box.append(format_group)
 
         self.hwaccels = ["cpu"] + get_hw_accels()
         hwaccel_model = Gtk.StringList.new(self.hwaccels)
         self.hwaccel_combo = Adw.ComboRow(model=hwaccel_model, title="Hardware")
-        self.hwaccel_combo.set_subtitle(HW_ACCEL_DESCRIPTIONS.get("cpu"))
+        self.hwaccel_combo.set_subtitle(HW_ACCEL["cpu"]["description"])
         self.hwaccel_combo.set_tooltip_text(
             "Select a hardware acceleration method for video encoding and decoding."
         )
@@ -164,19 +227,23 @@ class VideoConverterWindow(Adw.ApplicationWindow):
         self.container_combo = Adw.ComboRow(
             model=container_model, title="Container Format"
         )
-        self.container_combo.set_subtitle(CONTAINER_DESCRIPTIONS.get("auto"))
+        self.container_combo.set_subtitle("")
         self.container_combo.set_tooltip_text(
             "Choose the container format for the output file. 'auto' selects a suitable container based on the output file extension."
         )
-        self.container_combo.set_selected(0)
         self.container_combo.connect(
             "notify::selected-item", self.on_container_selected
         )
         format_expander.add_row(self.container_combo)
 
-        codec_model = Gtk.StringList.new(HW_ENCODERS["cpu"])
+        codec_list = HW_ACCEL["cpu"]["codecs"]
+        codec_model = self._get_codec_list(codec_list)
         self.codec_combo = Adw.ComboRow(model=codec_model, title="Video Codec")
-        self.codec_combo.set_subtitle(CODEC_DESCRIPTIONS.get(HW_ENCODERS["cpu"][0]))
+        expression = Gtk.PropertyExpression.new(ListItem, None, "display")
+        self.codec_combo.set_expression(expression)
+        initial_props = get_codec_properties(codec_list[0])
+        if initial_props:
+            self.codec_combo.set_subtitle(initial_props.get("description", ""))
         self.codec_combo.set_tooltip_text("Choose the video codec for encoding.")
         self.codec_combo.set_selected(0)
         self.codec_combo.connect("notify::selected-item", self.on_codec_selected)
@@ -187,7 +254,7 @@ class VideoConverterWindow(Adw.ApplicationWindow):
 
         quality_model = Gtk.StringList.new(["ultrafast", "medium", "slow", "veryslow"])
         self.quality_combo = Adw.ComboRow(
-            model=quality_model, title="Encoding Speed / Quality Preset"
+            model=quality_model, title="Encoding Quality Preset"
         )
         self.quality_combo.set_subtitle("Affects encoding time and efficiency")
         self.quality_combo.set_tooltip_text(
@@ -197,79 +264,16 @@ class VideoConverterWindow(Adw.ApplicationWindow):
         self.quality_combo.connect("notify::selected", self._on_settings_changed)
         format_expander.add_row(self.quality_combo)
 
-        # Encoding section
-        encoding_group = Adw.PreferencesGroup()
-        encoding_expander = Adw.ExpanderRow(
-            title="Encoding strategy",
-            expanded=True,
-            icon_name="preferences-system-symbolic",
-        )
-        encoding_group.add(encoding_expander)
-        settings_box.append(encoding_group)
-
-        mode_model = Gtk.StringList.new(
-            [
-                "Target File Size",
-                "Target File Size (VBR)",
-                "Fixed Bitrate (CBR)",
-                "Average Bitrate (VBR)",
-                "Constant Quality",
-            ]
-        )
-        self.mode_combo = Adw.ComboRow(model=mode_model, title="Mode")
-        self.mode_combo.set_tooltip_text(
-            "Select the encoding mode. This determines how the bitrate is controlled."
-        )
-        self.mode_combo.set_selected(CONSTANT_QUALITY_INDEX)
-        self.mode_combo.connect("notify::selected", self.on_mode_changed)
-        encoding_expander.add_row(self.mode_combo)
-
-        self.target_size_entry = Adw.EntryRow(title="Target Size (MB)")
-        self.target_size_entry.set_tooltip_text(
-            "Set the desired output file size in megabytes (MB). The video bitrate will be calculated automatically."
-        )
-        self.target_size_entry.set_text("50")
-        self.target_size_entry.connect("changed", self._on_settings_changed)
-        encoding_expander.add_row(self.target_size_entry)
-
-        self.bitrate_entry = Adw.EntryRow(title="Video Bitrate (kbps)")
-        self.bitrate_entry.set_tooltip_text(
-            "Set a fixed or average video bitrate in kilobits per second (kbps)."
-        )
-        self.bitrate_entry.set_text("1000")
-        self.bitrate_entry.connect("changed", self._on_settings_changed)
-        encoding_expander.add_row(self.bitrate_entry)
-
-        cq_model = Gtk.StringList.new(
-            ["lowest", "low", "medium", "high", "very-high", "lossless"]
-        )
-        self.cq_combo = Adw.ComboRow(model=cq_model, title="Quality Level")
-        self.cq_combo.set_tooltip_text(
-            "Constant Quality (CRF/QP). Lower values mean higher quality and larger file size. 'medium' is a good starting point."
-        )
-        self.cq_combo.set_selected(2)
-        self.cq_combo.connect("notify::selected", self._on_settings_changed)
-        encoding_expander.add_row(self.cq_combo)
-
         # Advanced settings
         advanced_group = Adw.PreferencesGroup()
         advanced_expander = Adw.ExpanderRow(
-            title="Advanced Settings",
+            title="Advanced",
             expanded=True,
             icon_name="preferences-other-symbolic",
         )
         advanced_group.add(advanced_expander)
         settings_box.append(advanced_group)
         advanced_expander.set_expanded(False)
-
-        scaling_expander = Adw.ExpanderRow(title="Video Scaling")
-        scaling_expander.set_tooltip_text(
-            "Resize the video. 1.0 is original size, 0.5 is half size."
-        )
-        self.scale_factor_scale = ScalingFactorScale()
-        self.scale_factor_scale.scale.connect("value-changed", self._on_settings_changed)
-        scaling_expander.add_row(self.scale_factor_scale)
-        advanced_expander.add_row(scaling_expander)
 
         passes_expander = Adw.ExpanderRow(title="Number of Passes")
         passes_expander.set_tooltip_text(
@@ -291,17 +295,16 @@ class VideoConverterWindow(Adw.ApplicationWindow):
         self.audio_mode_combo.connect("notify::selected", self.on_audio_mode_changed)
         advanced_expander.add_row(self.audio_mode_combo)
 
-        audio_codec_model = Gtk.StringList.new(list(AUDIO_CODEC_MAP.keys()))
+        audio_codec_model = Gtk.StringList.new(list(AUDIO_CODECS.keys()))
         self.audio_codec_combo = Adw.ComboRow(
             model=audio_codec_model, title="Audio Codec"
         )
-        self.audio_codec_combo.set_subtitle(
-            AUDIO_CODEC_DESCRIPTIONS.get(list(AUDIO_CODEC_MAP.keys())[0])
-        )
+        self.audio_codec_combo.set_subtitle(list(AUDIO_CODECS.values())[0]["descr"])
         self.audio_codec_combo.set_selected(0)
         self.audio_codec_combo.connect(
             "notify::selected-item", self.on_audio_codec_selected
         )
+        self.audio_codec_combo.set_selected(0)
         advanced_expander.add_row(self.audio_codec_combo)
 
         audio_expander = Adw.ExpanderRow(title="Audio Bitrate")
@@ -353,13 +356,16 @@ class VideoConverterWindow(Adw.ApplicationWindow):
 
         main_container.append(self.view_stack)
 
-        drop_target = Gtk.DropTarget.new(Gdk.FileList, Gdk.DragAction.COPY)
-        drop_target.connect("drop", self._on_drop)
-        drop_target.connect("enter", self._on_drag_enter)
-        drop_target.connect("leave", self._on_drag_leave)
-        main_container.add_controller(drop_target)
 
         self.set_content(main_container)
+
+        drop_target = Gtk.DropTarget.new(type=GObject.TYPE_NONE, actions=Gdk.DragAction.COPY)
+        drop_target.set_gtypes([Gdk.FileList, str])
+        drop_target.connect("drop", self._on_drop)
+        drop_target.connect("enter", self._on_enter)
+        drop_target.connect("motion", self._on_drag_motion)  # Use 'motion' not 'enter'
+        drop_target.connect("leave", self._on_drag_leave)
+        self.add_controller(drop_target)  # Add to window, not container
 
         self.on_mode_changed(None, None)
         self.on_audio_mode_changed(None, None)
@@ -374,8 +380,6 @@ class VideoConverterWindow(Adw.ApplicationWindow):
 
             # Reset output file when input changes
             self.output_row.set_subtitle("No file selected")
-            if hasattr(self, "outputfile"):
-                self.outputfile = None
 
             # Get video properties
             try:
@@ -425,25 +429,39 @@ class VideoConverterWindow(Adw.ApplicationWindow):
                 print(f"Could not read audio bitrate: {e}", file=sys.stderr)
         except Exception as e:
             print(f"Error processing input file: {e}", file=sys.stderr)
+        self._on_settings_changed()
 
-    def _on_drag_enter(self, drop_target, x, y):
+    def _on_drag_motion(self, drop_target, x, y):
+        """Handle drag motion to show drop zone and enable cursor change."""
         self.view_stack.add_css_class("drop-zone")
-        # Return the action we want to perform
-        print("plop")
-        return Gdk.DragAction.COPY
+        return Gdk.DragAction.COPY  # This enables the cursor change
 
+    # Keep your _on_drag_leave as is (or improve it):
     def _on_drag_leave(self, drop_target):
+        """Remove drop zone styling when drag leaves."""
         self.view_stack.remove_css_class("drop-zone")
 
+    def _on_enter(self, drop_target, x, y):
+        # Add visual feedback, e.g., change the widget's appearance
+        return Gdk.DragAction.COPY  # Accept the drop
+
+    # Fix the _on_drop method:
     def _on_drop(self, drop_target, value, x, y):
+        """Handle the actual drop event."""
         self.view_stack.remove_css_class("drop-zone")
+        print(value)
+
         if isinstance(value, Gdk.FileList):
             files = value.get_files()
-            if files:
-                # We only handle the first dropped file
-                file_path = files[0].get_path()
-                self._handle_new_input_file(file_path)
-        return True  # Indicate that the drop was successfully handled
+            if files and len(files) > 0:
+                first_file = files[0]
+                if first_file:
+                    file_path = first_file.get_path()
+                    if file_path:  # Verify path is valid
+                        self._handle_new_input_file(file_path)
+                        return True
+
+        return False
 
     def _on_settings_changed(self, *args):
         """Update quality/speed hints when settings change."""
@@ -455,8 +473,8 @@ class VideoConverterWindow(Adw.ApplicationWindow):
             selected_index = self.mode_combo.get_selected()
             mode = self.mode_keys[selected_index]
 
-            if "target-size" in mode:
-                target_size = float(self.target_size_entry.get_text())
+            if "size" in mode:
+                target_size = self.target_size_entry.get_value()
                 video_bitrate = (
                     int(
                         (target_size * 8192 / self.video_duration)
@@ -465,37 +483,32 @@ class VideoConverterWindow(Adw.ApplicationWindow):
                     if self.video_duration > 0
                     else 0
                 )
-            elif mode == "cq":
+            elif EncodingModes.cq.name == mode:
                 # For CQ mode, use a standard reference bitrate (varies by codec)
-                codec_str = (
-                    self.codec_combo.get_selected_item().get_string()
+                codec = (
+                    self.codec_combo.get_selected_item().value
                     if self.codec_combo.get_selected_item()
                     else "h264"
                 )
-                codec = get_codec_name(codec_str)
+                props = get_codec_properties(codec)
                 # Reference bitrates for different codecs at "balanced" quality
                 ref_bitrates = {
-                    "libx264": 2000,
-                    "libx265": 1500,
-                    "libvpx-vp9": 1500,
-                    "libaom-av1": 1200,
+                    "h264": 2000,
+                    "h265": 1500,
+                    "vp9": 1500,
+                    "av1": 1200,
                     "mpeg4": 2500,
                 }
-                video_bitrate = ref_bitrates.get(codec, 2000)
+                video_bitrate = ref_bitrates.get(props.get("family"), 2000)
             else:
-                video_bitrate = (
-                    int(self.bitrate_entry.get_text())
-                    if self.bitrate_entry.get_text()
-                    else 1000
-                )
+                video_bitrate = int(self.bitrate_entry.get_value())
 
             # Get codec and preset
-            codec_str = (
-                self.codec_combo.get_selected_item().get_string()
+            codec = (
+                self.codec_combo.get_selected_item().value
                 if self.codec_combo.get_selected_item()
                 else "h264"
             )
-            codec = get_codec_name(codec_str)
             preset = (
                 self.quality_combo.get_selected_item().get_string()
                 if self.quality_combo.get_selected_item()
@@ -526,7 +539,10 @@ class VideoConverterWindow(Adw.ApplicationWindow):
                 self.mode_combo.get_selected(),
                 hwaccel,
             )
-        except (ValueError, AttributeError):
+            # show ffmpeg command
+            self.hints_label.debug(" ".join(self.get_ffmpeg_command()))
+        except (ValueError, AttributeError) as e:
+            print(e)
             pass
 
     def on_audio_mode_changed(self, widget, _):
@@ -548,13 +564,16 @@ class VideoConverterWindow(Adw.ApplicationWindow):
         selected_index = self.mode_combo.get_selected()
         active_mode = self.mode_keys[selected_index]
 
-        is_cq = active_mode == "cq"
+        is_cq = EncodingModes.cq.name == active_mode
         is_vbr = "vbr" in active_mode
-        is_target_size = "target-size" in active_mode
+        is_target_size = "size" in active_mode
 
-        self.target_size_entry.set_visible(is_target_size)
-        self.bitrate_entry.set_visible(not is_target_size and not is_cq)
-        self.cq_combo.set_visible(is_cq)
+        if is_target_size:
+            self.mode_settings_stack.set_visible_child_name("target_size")
+        elif is_cq:
+            self.mode_settings_stack.set_visible_child_name("cq")
+        else:  # cbr or vbr
+            self.mode_settings_stack.set_visible_child_name("bitrate")
 
         self.passes_expander.set_visible(is_vbr)
 
@@ -595,11 +614,11 @@ class VideoConverterWindow(Adw.ApplicationWindow):
                     path = Path(file.get_path())
                     self.output_row.set_subtitle(path.name)
                     self.output_file = path
+                    self._on_settings_changed()
             except Exception:
                 pass  # User cancelled
 
         dialog.save(self, None, on_response)
-
     def log_output(self, message):
         """Add message to output log."""
         buffer = self.output_text.get_buffer()
@@ -653,6 +672,7 @@ class VideoConverterWindow(Adw.ApplicationWindow):
         """Cancel conversion."""
         self.is_encoding = False
         self.progress_bar.set_text("Cancelling...")
+        self.view_stack.set_visible_child_name("settings")
 
     def on_hwaccel_selected(self, combo, _):
         """Handle hardware acceleration selection changes."""
@@ -661,27 +681,27 @@ class VideoConverterWindow(Adw.ApplicationWindow):
             return
 
         hwaccel_name = selected_item.get_string().lower()
-        if hwaccel_name == "none":
-            hwaccel_name = "cpu"
-        self._hw_accel = hwaccel_name
 
         # Update description
-        description = HW_ACCEL_DESCRIPTIONS.get(
-            hwaccel_name, f"Hardware acceleration method: {hwaccel_name.upper()}"
-        )
+        description = HW_ACCEL.get(hwaccel_name, HW_ACCEL["cpu"])['description']
         combo.set_subtitle(description)
 
-        # Update codec list
-        codec_list = HW_ENCODERS.get(hwaccel_name, HW_ENCODERS["cpu"])
-        self.codec_combo.set_model(Gtk.StringList.new(codec_list))
-        self.codec_combo.set_selected(0)
-        self.codec_combo.set_subtitle(CODEC_DESCRIPTIONS.get(codec_list[0].lower(), ""))
+        current_codec = self.codec_combo.get_selected_item().value
+        codec_family = CODECS[current_codec]['family']
 
-        # Quality and CQ presets are available for most encoders.
-        is_cpu = hwaccel_name == "cpu"
-        self.quality_combo.set_sensitive(not is_cpu)
-        self.cq_combo.set_sensitive(not is_cpu)
+        # Update codec list
+        codec_list = HW_ACCEL.get(hwaccel_name, HW_ACCEL["cpu"])["codecs"]
+        store = self._get_codec_list(codec_list)
+        self.codec_combo.set_model(store)
+        for i, codec in enumerate(codec_list):
+            if CODECS[codec]["family"] == codec_family:
+                self.codec_combo.set_selected(i)
+                break
+        self.on_codec_selected(self.codec_combo, None)
         self._on_settings_changed()
+
+    def _get_codec_list(self, orig):
+        return get_ItemList(orig, lambda codec: CODECS[codec]["name"])
 
     def on_container_selected(self, combo, _):
         """Handle container selection changes and update subtitle."""
@@ -689,7 +709,10 @@ class VideoConverterWindow(Adw.ApplicationWindow):
         if not selected_item:
             return
         container_name = selected_item.get_string().lower()
-        description = CONTAINER_DESCRIPTIONS.get(container_name, "")
+        if container_name == "auto":
+            description = "Automatically detect from output file extension"
+        else:
+            description = CONTAINERS[container_name]["descr"]
         combo.set_subtitle(description)
 
     def on_codec_selected(self, combo, _):
@@ -697,9 +720,32 @@ class VideoConverterWindow(Adw.ApplicationWindow):
         selected_item = combo.get_selected_item()
         if not selected_item:
             return
-        codec_name = selected_item.get_string().lower()
-        description = CODEC_DESCRIPTIONS.get(codec_name, "")
-        combo.set_subtitle(description)
+        codec = selected_item.value
+        props = get_codec_properties(codec)
+        if not props:
+            return
+
+        combo.set_subtitle(props.get("description", ""))
+
+        # Update quality presets
+        presets = props.get("presets")
+        if presets:
+            self.quality_combo.set_model(Gtk.StringList.new(list(presets.keys())))
+            self.quality_combo.set_sensitive(True)
+            self.quality_combo.set_selected(1)
+        else:
+            self.quality_combo.set_model(Gtk.StringList.new([]))
+            self.quality_combo.set_sensitive(False)
+
+        # Update CQ levels
+        cq_levels = props.get("cq_levels")
+        if cq_levels:
+            self.cq_combo.set_model(Gtk.StringList.new(list(cq_levels.keys())))
+            self.cq_combo.set_sensitive(True)
+            self.cq_combo.set_selected(3)  # medium
+        else:
+            self.cq_combo.set_model(Gtk.StringList.new([]))
+            self.cq_combo.set_sensitive(False)
 
     def on_audio_codec_selected(self, combo, _):
         """Handle audio codec selection changes and update subtitle."""
@@ -707,7 +753,7 @@ class VideoConverterWindow(Adw.ApplicationWindow):
         if not selected_item:
             return
         audio_codec_name = selected_item.get_string()
-        description = AUDIO_CODEC_DESCRIPTIONS.get(audio_codec_name, "")
+        description = AUDIO_CODECS[audio_codec_name]["descr"]
         combo.set_subtitle(description)
 
     def update_progress(self):
@@ -719,7 +765,7 @@ class VideoConverterWindow(Adw.ApplicationWindow):
 
         # For CQ mode, try to parse ffmpeg output for time progress
         # This requires capturing ffmpeg output progressively
-        if mode == "cq":
+        if mode == EncodingModes.cq.name:
             # Parse stderr for time= progress
             # This requires capturing ffmpeg output progressively
             self.progress_bar.pulse()
@@ -764,41 +810,161 @@ class VideoConverterWindow(Adw.ApplicationWindow):
 
         return True
 
+    def get_conversion_parameters(self):
+        """Extract and validate conversion parameters from UI.
+
+        Returns:
+            dict: Dictionary containing all conversion parameters
+
+        Raises:
+            ValueError: If parameters are invalid
+        """
+        input_file = self.input_file
+        output_file = self.output_file
+
+        if not input_file.is_file():
+            raise ValueError(f"Input file not found: {input_file}")
+
+        try:
+            output_ext = output_file.suffix.lower().lstrip(".")
+        except AttributeError:
+            output_ext = "mp4"
+
+        # Determine hwaccel and codec based on UI
+        hwaccel = self.hwaccel_combo.get_selected_item().get_string().lower()
+        if hwaccel == "cpu":
+            hwaccel = "None"  # Pass "None" for decoding
+
+        codec = self.codec_combo.get_selected_item().value
+
+        container_str = (
+            self.container_combo.get_selected_item().get_string()
+            if self.container_combo.get_selected_item()
+            else "auto"
+        )
+
+        if container_str == "auto":
+            container = detect_container_from_extension(output_ext)
+        else:
+            container = get_container_name(container_str)
+
+        if codec == "auto":
+            codec = detect_codec_from_extension(output_ext)
+
+        duration = get_video_duration(input_file.absolute())
+        if duration is None:
+            raise ValueError("Could not determine video duration")
+
+        audio_bitrate = self.audio_scale.get_value()
+        scale_factor = self.scale_factor_scale.get_value()
+        quality = (
+            self.quality_combo.get_selected_item().get_string()
+            if self.quality_combo.get_selected_item()
+            else "balanced"
+        )
+        passes = self.passes_slider.get_value()
+
+        audio_mode_index = self.audio_mode_combo.get_selected()
+        audio_mode_map = ["transcode", "copy", "disable"]
+        audio_mode = audio_mode_map[audio_mode_index]
+
+        audio_codec_str = (
+            self.audio_codec_combo.get_selected_item().get_string()
+            if self.audio_codec_combo.get_selected_item()
+            else "AAC"
+        )
+        audio_codec = get_audio_codec_name(audio_codec_str)
+
+        selected_index = self.mode_combo.get_selected()
+        mode = self.mode_keys[selected_index]
+
+        video_bitrate = 0
+        cq_level = None
+        is_cq = mode == EncodingModes.cq.name
+
+        if is_cq:
+            cq_level = (
+                self.cq_combo.get_selected_item().get_string()
+                if self.cq_combo.get_selected_item()
+                else "medium"
+            )
+        elif "size" in mode:
+            target_size = self.target_size_entry.get_value()
+            video_bitrate = calculate_bitrate(target_size, duration, audio_bitrate)
+        else:
+            video_bitrate = int(self.bitrate_entry.get_value())
+
+        is_vbr = "vbr" in mode
+        actual_passes = passes if is_vbr else 1
+
+        return {
+            "input_file": input_file,
+            "output_file": output_file,
+            "codec": codec,
+            "container": container,
+            "hwaccel": hwaccel,
+            "video_bitrate": video_bitrate,
+            "audio_bitrate": audio_bitrate,
+            "scale_factor": scale_factor,
+            "quality": quality,
+            "audio_mode": audio_mode,
+            "audio_codec": audio_codec,
+            "is_cq": is_cq,
+            "cq_level": cq_level,
+            "is_vbr": is_vbr,
+            "actual_passes": actual_passes,
+            "duration": duration,
+            "mode": mode,
+        }
+
+    def get_ffmpeg_command(self, pass_num=None):
+        """Get the ffmpeg command that would be executed.
+
+        Args:
+            pass_num (int, optional): Pass number for multi-pass encoding.
+                                     None for single-pass.
+
+        Returns:
+            list: The ffmpeg command as a list of arguments
+
+        Raises:
+            ValueError: If parameters are invalid
+        """
+        try:
+            params = self.get_conversion_parameters()
+        except ValueError:
+            return []
+
+        actual_pass_num = (
+            pass_num if pass_num is not None else (1 if params["is_vbr"] else None)
+        )
+
+        cmd = build_ffmpeg_command(
+            "IN",
+            "OUT",
+            params["codec"],
+            params["container"],
+            params["video_bitrate"],
+            params["audio_bitrate"],
+            params["scale_factor"],
+            quality=params["quality"],
+            is_vbr=params["is_vbr"],
+            pass_num=actual_pass_num,
+            is_cq=params["is_cq"],
+            cq_level=params["cq_level"],
+            audio_mode=params["audio_mode"],
+            audio_codec=params["audio_codec"],
+            hwaccel=params["hwaccel"],
+        )
+
+        return cmd
+
     def run_conversion(self):
         """Run the conversion."""
         try:
             self.is_encoding = True
-            input_file = self.input_file
-            output_file = self.output_file
 
             GLib.idle_add(self.log_output, "=== Video Converter Started ===")
-
-            if not input_file.is_file():
-                GLib.idle_add(
-                    self.log_output, f"Error: Input file not found: {input_file}"
-                )
-                return
-
-            output_ext = output_file.suffix.lower().lstrip(".")
-
-            # Determine hwaccel and codec based on UI
-            hwaccel = self.hwaccel_combo.get_selected_item().get_string().lower()
-            if hwaccel == "cpu":
-                hwaccel = "None"  # Pass "None" for decoding
-
-            codec_str = self.codec_combo.get_selected_item().get_string()
-            codec = get_codec_name(codec_str)
-
-            container_str = (
-                self.container_combo.get_selected_item().get_string()
-                if self.container_combo.get_selected_item()
-                else "auto"
-            )
-
-            if container_str == "auto":
-                container = detect_container_from_extension(output_ext)
-            else:
-                container = get_container_name(container_str)
 
             try:
                 subprocess.run(
@@ -808,41 +974,28 @@ class VideoConverterWindow(Adw.ApplicationWindow):
                 GLib.idle_add(self.log_output, "Error: ffmpeg is not installed")
                 return
 
-            duration = get_video_duration(input_file.absolute())
-
-            if duration is None:
-                GLib.idle_add(
-                    self.log_output, "Error: Could not determine video duration"
-                )
-                return
-
             try:
-                audio_bitrate = self.audio_scale.get_value()
-                scale_factor = self.scale_factor_scale.get_value()
-                quality = (
-                    self.quality_combo.get_selected_item().get_string()
-                    if self.quality_combo.get_selected_item()
-                    else "balanced"
-                )
-                passes = self.passes_slider.get_value()
-
-                audio_mode_index = self.audio_mode_combo.get_selected()
-                audio_mode_map = ["transcode", "copy", "disable"]
-                audio_mode = audio_mode_map[audio_mode_index]
-
-                audio_codec_str = (
-                    self.audio_codec_combo.get_selected_item().get_string()
-                    if self.audio_codec_combo.get_selected_item()
-                    else "AAC"
-                )
-                audio_codec = get_audio_codec_name(audio_codec_str)
-
+                params = self.get_conversion_parameters()
             except ValueError as e:
-                GLib.idle_add(self.log_output, f"Error: Invalid input - {e}")
+                GLib.idle_add(self.log_output, f"Error: {e}")
                 return
 
-            selected_index = self.mode_combo.get_selected()
-            mode = self.mode_keys[selected_index]
+            input_file = params["input_file"]
+            output_file = params["output_file"]
+            codec = params["codec"]
+            container = params["container"]
+            quality = params["quality"]
+            scale_factor = params["scale_factor"]
+            audio_mode = params["audio_mode"]
+            audio_codec = params["audio_codec"]
+            audio_bitrate = params["audio_bitrate"]
+            video_bitrate = params["video_bitrate"]
+            duration = params["duration"]
+            mode = params["mode"]
+            is_cq = params["is_cq"]
+            cq_level = params["cq_level"]
+            is_vbr = params["is_vbr"]
+            actual_passes = params["actual_passes"]
 
             GLib.idle_add(self.log_output, f"Input: {input_file}")
             GLib.idle_add(self.log_output, f"Output: {output_file}")
@@ -858,49 +1011,25 @@ class VideoConverterWindow(Adw.ApplicationWindow):
 
             GLib.idle_add(self.log_output, f"Video duration: {duration}s\n")
 
-            video_bitrate = 0
-            cq_level = None
-            is_cq = mode == "cq"
-
             if is_cq:
-                cq_level = (
-                    self.cq_combo.get_selected_item().get_string()
-                    if self.cq_combo.get_selected_item()
-                    else "medium"
-                )
                 GLib.idle_add(self.log_output, f"Constant Quality level: {cq_level}")
-
-            elif "target-size" in mode:
-                try:
-                    target_size = float(self.target_size_entry.get_text())
-                    video_bitrate = calculate_bitrate(
-                        target_size, duration, audio_bitrate
-                    )
-                    GLib.idle_add(self.log_output, f"Target size: {target_size}MB")
-                    GLib.idle_add(
-                        self.log_output,
-                        f"Calculated video bitrate: {video_bitrate}kbps\n",
-                    )
-                except ValueError as e:
-                    GLib.idle_add(self.log_output, f"Error: {e}")
-                    return
-
+            elif "size" in mode:
+                target_size = float(self.target_size_entry.get_text())
+                GLib.idle_add(self.log_output, f"Target size: {target_size}MB")
+                GLib.idle_add(
+                    self.log_output,
+                    f"Calculated video bitrate: {video_bitrate}kbps\n",
+                )
             else:
-                try:
-                    video_bitrate = int(self.bitrate_entry.get_text())
-                    GLib.idle_add(
-                        self.log_output, f"Video bitrate: {video_bitrate}kbps\n"
-                    )
-                except ValueError:
-                    GLib.idle_add(self.log_output, "Error: Invalid bitrate")
-                    return
-
+                GLib.idle_add(self.log_output, f"Video bitrate: {video_bitrate}kbps\n")
             # Estimate final size for progress bar
             self.estimated_size_bytes = 0
-            if "target-size" in mode:
+            if "size" in mode:
                 target_size = float(self.target_size_entry.get_text())
                 self.estimated_size_bytes = target_size * 1024 * 1024
-            elif "cq" not in mode:  # CBR or VBR bitrate modes
+            elif (
+                mode != EncodingModes.cq.name
+            ):  # Constant Bitrate or Variable Bitrate modes
                 effective_audio_bitrate = 0
                 if audio_mode == "transcode":
                     effective_audio_bitrate = audio_bitrate
@@ -915,9 +1044,6 @@ class VideoConverterWindow(Adw.ApplicationWindow):
                 ) * duration
 
             GLib.idle_add(self.log_output, "Starting encoding...\n")
-
-            is_vbr = "vbr" in mode
-            actual_passes = passes if is_vbr else 1
 
             def run_ffmpeg_process(cmd):
                 GLib.idle_add(self.log_output, f"Running {' '.join(cmd)}")
@@ -939,6 +1065,7 @@ class VideoConverterWindow(Adw.ApplicationWindow):
                     process.kill()
                     stdout, stderr = process.communicate()
 
+                GLib.idle_add(self.view_stack.set_visible_child_name, "settings")
                 return process.returncode, stdout, stderr
 
             if output_file.is_file():
@@ -973,7 +1100,7 @@ class VideoConverterWindow(Adw.ApplicationWindow):
                         cq_level=cq_level,
                         audio_mode=audio_mode,
                         audio_codec=audio_codec,
-                        hwaccel=hwaccel,
+                        hwaccel=params["hwaccel"],
                     )
 
                     if pass_num < actual_passes:
@@ -983,7 +1110,7 @@ class VideoConverterWindow(Adw.ApplicationWindow):
                     return_code, _, stderr = run_ffmpeg_process(cmd)
 
                     if return_code != 0:
-                        if self.is_encoding:  # Don't show error if cancelled
+                        if self.is_encoding:  # Don't show error if canceled
                             GLib.idle_add(
                                 self.log_output, f"Error at pass {pass_num}: {stderr}"
                             )
@@ -1004,7 +1131,7 @@ class VideoConverterWindow(Adw.ApplicationWindow):
                     cq_level=cq_level,
                     audio_mode=audio_mode,
                     audio_codec=audio_codec,
-                    hwaccel=hwaccel,
+                    hwaccel=params["hwaccel"],
                 )
 
                 return_code, _, stderr = run_ffmpeg_process(cmd)
@@ -1015,7 +1142,7 @@ class VideoConverterWindow(Adw.ApplicationWindow):
                     return
 
             if not self.is_encoding:
-                GLib.idle_add(self.log_output, "\nEncoding cancelled by user.")
+                GLib.idle_add(self.log_output, "\nEncoding canceled by user.")
                 return
 
             if output_file.is_file():

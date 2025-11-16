@@ -11,12 +11,15 @@ from .constants import CSS
 class VideoConverterApp(Adw.Application):
     def __init__(self):
         super().__init__(application_id="com.example.VideoConverter")
-        self._hw_accel = "cpu"
+        self.win = None
+
+    def do_startup(self):
+        Adw.Application.do_startup(self)
+        self.win = VideoConverterWindow(self)
 
     def do_activate(self):
         """Activate the application."""
-        window = VideoConverterWindow(self)
-        window.present()
+        self.win.present()
 
 
 def main():

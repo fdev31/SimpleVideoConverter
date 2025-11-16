@@ -1,7 +1,8 @@
 import gi
 
+from gi.repository import Adw, Gtk
+
 gi.require_version("Gtk", "4.0")
-from gi.repository import Gtk
 
 from ..constants import COMPUTER_SPEED_FACTOR, POPULAR_AUDIO_BITRATES
 from ..utils import (
@@ -11,14 +12,20 @@ from ..utils import (
     get_bpp_profile_key,
     rate_quality_from_bpp,
 )
-from ..constants import CODEC_BPP_RATINGS, CONSTANT_QUALITY_INDEX
+from ..constants import CODEC_BPP_RATINGS, CONSTANT_QUALITY_INDEX, DEBUG, BLOCK_SIZE
 
 
 class HintsLabel(Gtk.Box):
     """Label showing quality/speed hints with icons and colors."""
 
     def __init__(self):
-        super().__init__(orientation=Gtk.Orientation.VERTICAL, spacing=6)
+        super().__init__(
+            orientation=Gtk.Orientation.VERTICAL,
+            spacing=12,
+            margin_start=12,
+            margin_bottom=12,
+            margin_top=12,
+        )
 
         # Quality hint
         quality_box = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL, spacing=6)
@@ -35,6 +42,15 @@ class HintsLabel(Gtk.Box):
         speed_box.append(self.speed_icon)
         speed_box.append(self.speed_label)
         self.append(speed_box)
+        if DEBUG:
+            self.debug_label = Gtk.Label(label="", xalign=0)
+            self.debug_label.set_wrap(True)
+            self.debug_label.set_wrap_mode(Gtk.WrapMode.WORD)
+            self.append(self.debug_label)
+
+    def debug(self, message):
+        if DEBUG:
+            self.debug_label.set_label(message)
 
     def update_quality_speed(
         self,
@@ -76,7 +92,7 @@ class HintsLabel(Gtk.Box):
             self.quality_icon.set_from_icon_name("dialog-information-symbolic")
             tooltip_text = f"Constant Quality mode selected.\n'{cq_level}' preset."
         else:
-            quality_text = f"Quality: {quality_rating} ({bpp:.4f} BPP)"
+            quality_text = f"Quality: {quality_rating} ({BLOCK_SIZE * bpp:.4f} BPB)"
             self.quality_label.set_label(quality_text)
             quality_rating_lower = quality_rating.lower()
 
@@ -125,9 +141,7 @@ class HintsLabel(Gtk.Box):
             self.speed_icon.set_from_icon_name("face-sad-symbolic")
             self.speed_label.add_css_class("error")
 
-        speed_tooltip = (
-            f"Estimated encoding time: {time_str}\nBased on a computer speed factor of {COMPUTER_SPEED_FACTOR}."
-        )
+        speed_tooltip = f"Estimated encoding time: {time_str}\nBased on a computer speed factor of {COMPUTER_SPEED_FACTOR}."
         self.speed_label.set_tooltip_text(speed_tooltip)
         self.speed_icon.set_tooltip_text(speed_tooltip)
 
@@ -180,10 +194,19 @@ class ScalingFactorScale(Gtk.Box):
     """Custom widget for scaling factor slider."""
 
     def __init__(self):
-        super().__init__(orientation=Gtk.Orientation.VERTICAL, spacing=6)
+        super().__init__(
+            orientation=Gtk.Orientation.VERTICAL,
+            spacing=12,
+            margin_top=12,
+        )
         self.original_width = 1920
         self.original_height = 1080
         self.updating = False
+
+        scale_group = Adw.PreferencesGroup()
+        scale_row = Adw.ExpanderRow(title="Scale", icon_name="transform-scale-symbolic")
+        scale_group.add(scale_row)
+        self.append(scale_group)
 
         self.adjustment = Gtk.Adjustment(
             lower=0.0, upper=1.0, step_increment=0.01, page_increment=0.1, value=1.0
@@ -203,7 +226,7 @@ class ScalingFactorScale(Gtk.Box):
         for scale in common_scales:
             self.scale.add_mark(scale, Gtk.PositionType.BOTTOM, f"{int(scale * 100)}%")
 
-        self.append(self.scale)
+        scale_row.add_row(self.scale)
 
         button_box = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL, spacing=12)
         button_box.set_homogeneous(True)
@@ -214,7 +237,7 @@ class ScalingFactorScale(Gtk.Box):
             btn.connect("clicked", lambda w, v=value: self.adjustment.set_value(v))
             button_box.append(btn)
 
-        self.append(button_box)
+        scale_row.add_row(button_box)
 
         dimensions_box = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL, spacing=12)
         dimensions_box.set_homogeneous(True)
@@ -222,10 +245,11 @@ class ScalingFactorScale(Gtk.Box):
         width_box = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=3)
         width_label = Gtk.Label(label="Width (px)", xalign=0)
         width_label.add_css_class("caption")
-        self.width_entry = Gtk.Entry()
-        self.width_entry.set_text("1920")
-        self.width_entry.set_input_purpose(Gtk.InputPurpose.NUMBER)
-        self.width_entry.connect("changed", self._on_width_changed)
+        self.width_adjustment = Gtk.Adjustment.new(
+            self.original_width, 1, 4096, 1, 10, 0
+        )
+        self.width_entry = Gtk.SpinButton(adjustment=self.width_adjustment, digits=0)
+        self.width_entry.connect("value-changed", self._on_width_changed)
         width_box.append(width_label)
         width_box.append(self.width_entry)
         dimensions_box.append(width_box)
@@ -233,23 +257,24 @@ class ScalingFactorScale(Gtk.Box):
         height_box = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=3)
         height_label = Gtk.Label(label="Height (px)", xalign=0)
         height_label.add_css_class("caption")
-        self.height_entry = Gtk.Entry()
-        self.height_entry.set_text("1080")
-        self.height_entry.set_input_purpose(Gtk.InputPurpose.NUMBER)
-        self.height_entry.connect("changed", self._on_height_changed)
+        self.height_adjustment = Gtk.Adjustment.new(
+            self.original_height, 1, 4096, 1, 10, 0
+        )
+        self.height_entry = Gtk.SpinButton(adjustment=self.height_adjustment, digits=0)
+        self.height_entry.connect("value-changed", self._on_height_changed)
         height_box.append(height_label)
         height_box.append(self.height_entry)
         dimensions_box.append(height_box)
 
-        self.append(dimensions_box)
+        scale_row.add_row(dimensions_box)
 
     def set_original_dimensions(self, width, height):
         """Set the original video dimensions."""
         self.original_width = width
         self.original_height = height
         self.updating = True
-        self.width_entry.set_text(str(width))
-        self.height_entry.set_text(str(height))
+        self.width_entry.set_value(width)
+        self.height_entry.set_value(height)
         self.adjustment.set_value(1.0)
         self.updating = False
 
@@ -261,33 +286,37 @@ class ScalingFactorScale(Gtk.Box):
         factor = self.adjustment.get_value()
         new_width = max(1, int(self.original_width * factor))
         new_height = max(1, int(self.original_height * factor))
-        self.width_entry.set_text(str(new_width))
-        self.height_entry.set_text(str(new_height))
+        self.width_entry.set_value(new_width)
+        self.height_entry.set_value(new_height)
         self.updating = False
 
     def _on_width_changed(self, widget):
-        """Update scaling factor when width changes."""
+        """Update height and scaling factor when width changes."""
         if self.updating:
             return
         try:
-            new_width = int(self.width_entry.get_text())
-            if new_width > 0:
+            new_width = int(self.width_entry.get_value())
+            if new_width > 0 and self.original_width > 0:
                 self.updating = True
                 factor = new_width / self.original_width
+                new_height = max(1, int(self.original_height * factor))
+                self.height_entry.set_value(new_height)
                 self.adjustment.set_value(max(0.0, min(1.0, factor)))
                 self.updating = False
         except ValueError:
             pass
 
     def _on_height_changed(self, widget):
-        """Update scaling factor when height changes."""
+        """Update width and scaling factor when height changes."""
         if self.updating:
             return
         try:
-            new_height = int(self.height_entry.get_text())
-            if new_height > 0:
+            new_height = int(self.height_entry.get_value())
+            if new_height > 0 and self.original_height > 0:
                 self.updating = True
                 factor = new_height / self.original_height
+                new_width = max(1, int(self.original_width * factor))
+                self.width_entry.set_value(new_width)
                 self.adjustment.set_value(max(0.0, min(1.0, factor)))
                 self.updating = False
         except ValueError:
