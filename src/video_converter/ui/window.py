@@ -36,13 +36,7 @@ from ..utils import (
     get_video_duration,
     get_video_properties,
 )
-from .widgets import (
-    AudioBitrateScale,
-    HintsLabel,
-    PassesSlider,
-    ScalingFactorScale,
-    TransformRow
-)
+from .widgets import AudioBitrateScale, HintsLabel, ScalingFactorScale, TransformRow
 
 
 class VideoConverterWindow(Adw.ApplicationWindow):
@@ -147,7 +141,9 @@ class VideoConverterWindow(Adw.ApplicationWindow):
         files_group.add(encoding_mode_action_row)
 
         self.scale_factor_scale = ScalingFactorScale()
-        self.scale_factor_scale.scale.connect("value-changed", self._on_settings_changed)
+        self.scale_factor_scale.scale.connect(
+            "value-changed", self._on_settings_changed
+        )
         files_group.add(self.scale_factor_scale)
 
         # Hints label (quality/speed)
@@ -174,7 +170,9 @@ class VideoConverterWindow(Adw.ApplicationWindow):
         controls_box.append(self.mode_settings_stack)
 
         self.target_size_adjustment = Gtk.Adjustment.new(50, 1, 100000, 1, 10, 0)
-        self.target_size_entry = Gtk.SpinButton(adjustment=self.target_size_adjustment, digits=0)
+        self.target_size_entry = Gtk.SpinButton(
+            adjustment=self.target_size_adjustment, digits=0
+        )
         self.target_size_entry.set_tooltip_text(
             "Set the desired output file size in megabytes (MB). The video bitrate will be calculated automatically."
         )
@@ -184,7 +182,9 @@ class VideoConverterWindow(Adw.ApplicationWindow):
         )
 
         self.bitrate_adjustment = Gtk.Adjustment.new(1000, 1, 500000, 1, 100, 0)
-        self.bitrate_entry = Gtk.SpinButton(adjustment=self.bitrate_adjustment, digits=0)
+        self.bitrate_entry = Gtk.SpinButton(
+            adjustment=self.bitrate_adjustment, digits=0
+        )
         self.bitrate_entry.set_tooltip_text(
             "Set a fixed or average video bitrate in kilobits per second (kbps)."
         )
@@ -200,11 +200,7 @@ class VideoConverterWindow(Adw.ApplicationWindow):
         )
         self.cq_combo.set_selected(1)
         self.cq_combo.connect("notify::selected-item", self._on_settings_changed)
-        self.mode_settings_stack.add_titled(
-            self.cq_combo, "cq", "Quality Level"
-        )
-
-
+        self.mode_settings_stack.add_titled(self.cq_combo, "cq", "Quality Level")
 
         # Format & Quality section
         format_group = Adw.PreferencesGroup()
@@ -307,7 +303,6 @@ class VideoConverterWindow(Adw.ApplicationWindow):
         self.tracks_expander.add_row(self.no_tracks_row)
         advanced_expander.add_row(self.tracks_expander)
 
-
         audio_codec_model = Gtk.StringList.new(list(AUDIO_CODECS.keys()))
         self.audio_codec_combo = Adw.ComboRow(
             model=audio_codec_model, title="Audio Codec"
@@ -361,7 +356,10 @@ class VideoConverterWindow(Adw.ApplicationWindow):
         output_box.append(scrolled_output)
 
         self.view_stack.add_titled_with_icon(
-            self.scrolled_settings, "settings", "Settings", "preferences-system-symbolic"
+            self.scrolled_settings,
+            "settings",
+            "Settings",
+            "preferences-system-symbolic",
         )
         self.view_stack.add_titled_with_icon(
             output_box, "output", "Output", "utilities-terminal-symbolic"
@@ -369,10 +367,11 @@ class VideoConverterWindow(Adw.ApplicationWindow):
 
         main_container.append(self.view_stack)
 
-
         self.set_content(main_container)
 
-        drop_target = Gtk.DropTarget.new(type=GObject.TYPE_NONE, actions=Gdk.DragAction.COPY)
+        drop_target = Gtk.DropTarget.new(
+            type=GObject.TYPE_NONE, actions=Gdk.DragAction.COPY
+        )
         drop_target.set_gtypes([Gdk.FileList, str])
         drop_target.connect("drop", self._on_drop)
         drop_target.connect("enter", self._on_enter)
@@ -436,7 +435,9 @@ class VideoConverterWindow(Adw.ApplicationWindow):
 
                         combo = Adw.ComboRow(title=label, model=model)
                         combo.set_selected(0)  # Default to "Copy"
-                        combo.connect("notify::selected-item", self._on_settings_changed)
+                        combo.connect(
+                            "notify::selected-item", self._on_settings_changed
+                        )
 
                         self.tracks_expander.add_row(combo)
                         self.track_widgets.append(
@@ -599,7 +600,9 @@ class VideoConverterWindow(Adw.ApplicationWindow):
             has_audio_reencode = False
             for track_info in self.track_widgets:
                 if track_info["codec_type"] == "audio":
-                    selected_action = track_info["widget"].get_selected_item().get_string().lower()
+                    selected_action = (
+                        track_info["widget"].get_selected_item().get_string().lower()
+                    )
                     if selected_action == "re-encode":
                         has_audio_reencode = True
                         break
@@ -674,6 +677,7 @@ class VideoConverterWindow(Adw.ApplicationWindow):
                 pass  # User cancelled
 
         dialog.save(self, None, on_response)
+
     def log_output(self, message):
         """Add message to output log."""
         buffer = self.output_text.get_buffer()
@@ -693,7 +697,9 @@ class VideoConverterWindow(Adw.ApplicationWindow):
             self.action_button.set_tooltip_text("Cancel the ongoing conversion.")
 
     def on_action_clicked(self, widget):
-        handler = self.on_cancel_clicked if self.is_encoding else self.on_convert_clicked
+        handler = (
+            self.on_cancel_clicked if self.is_encoding else self.on_convert_clicked
+        )
         return handler(widget)
 
     def on_convert_clicked(self, widget):
@@ -738,11 +744,11 @@ class VideoConverterWindow(Adw.ApplicationWindow):
         hwaccel_name = selected_item.get_string().lower()
 
         # Update description
-        description = HW_ACCEL.get(hwaccel_name, HW_ACCEL["cpu"])['description']
+        description = HW_ACCEL.get(hwaccel_name, HW_ACCEL["cpu"])["description"]
         combo.set_subtitle(description)
 
         current_codec = self.codec_combo.get_selected_item().value
-        codec_family = CODECS[current_codec]['family']
+        codec_family = CODECS[current_codec]["family"]
 
         # Update codec list
         codec_list = HW_ACCEL.get(hwaccel_name, HW_ACCEL["cpu"])["codecs"]
@@ -1104,7 +1110,9 @@ class VideoConverterWindow(Adw.ApplicationWindow):
                 effective_audio_bitrate = 0
                 for track in self.track_widgets:
                     if track["codec_type"] == "audio":
-                        action = track["widget"].get_selected_item().get_string().lower()
+                        action = (
+                            track["widget"].get_selected_item().get_string().lower()
+                        )
                         if action == "re-encode":
                             effective_audio_bitrate += audio_bitrate
                         elif action == "copy":
@@ -1113,9 +1121,7 @@ class VideoConverterWindow(Adw.ApplicationWindow):
                             )  # Approximation
 
                 total_bitrate_kbps = video_bitrate + effective_audio_bitrate
-                self.estimated_size_bytes = (
-                    total_bitrate_kbps * 1000 / 8
-                ) * duration
+                self.estimated_size_bytes = (total_bitrate_kbps * 1000 / 8) * duration
 
             GLib.idle_add(self.log_output, "Starting encoding...\n")
 
