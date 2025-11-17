@@ -60,6 +60,7 @@ class VideoConverterWindow(Adw.ApplicationWindow):
         self.video_fps = 24.0
         self.video_duration = 30.0
 
+        self.input_file = None
         self.output_file = Path("./output.mp4")
 
         # Main container
@@ -101,9 +102,20 @@ class VideoConverterWindow(Adw.ApplicationWindow):
         files_group = Adw.PreferencesGroup(title="General")
         settings_box.append(files_group)
 
-        self.input_row = Adw.ActionRow(
-            title="Video to convert", subtitle="No file selected"
-        )
+        files_row = Adw.PreferencesRow()
+        files_group.add(files_row)
+
+        box = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL, spacing=12)
+        files_row.set_child(box)
+
+        # Input
+        input_box = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=6)
+        box.append(input_box)
+
+        input_label = Gtk.Label(label="<b>Video to convert</b>", use_markup=True, xalign=0)
+        input_box.append(input_label)
+
+        self.input_row = Adw.ActionRow(subtitle="No file selected")
         self.input_row.add_prefix(
             Gtk.Image.new_from_icon_name("video-x-generic-symbolic")
         )
@@ -114,11 +126,16 @@ class VideoConverterWindow(Adw.ApplicationWindow):
         input_browse_button.connect("clicked", self.on_input_browse)
         self.input_row.add_suffix(input_browse_button)
         self.input_row.set_activatable_widget(input_browse_button)
-        files_group.add(self.input_row)
+        input_box.append(self.input_row)
 
-        self.output_row = Adw.ActionRow(
-            title="Output File", subtitle="No file selected"
-        )
+        # Output
+        output_box = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=6)
+        box.append(output_box)
+
+        output_label = Gtk.Label(label="<b>Output File</b>", use_markup=True, xalign=0)
+        output_box.append(output_label)
+
+        self.output_row = Adw.ActionRow(subtitle="No file selected")
         self.output_row.add_prefix(
             Gtk.Image.new_from_icon_name("media-floppy-symbolic")
         )
@@ -131,7 +148,7 @@ class VideoConverterWindow(Adw.ApplicationWindow):
         output_browse_button.connect("clicked", self.on_output_browse)
         self.output_row.add_suffix(output_browse_button)
         self.output_row.set_activatable_widget(output_browse_button)
-        files_group.add(self.output_row)
+        output_box.append(self.output_row)
 
         # Encoding section
         encoding_mode_action_row = Adw.ActionRow(title="Encoding Mode")
@@ -704,7 +721,7 @@ class VideoConverterWindow(Adw.ApplicationWindow):
 
     def on_convert_clicked(self, widget):
         """Start conversion."""
-        if not hasattr(self, "input_file") or not hasattr(self, "output_file"):
+        if not self.input_file or not self.output_file:
             dialog = Adw.AlertDialog.new(
                 "Error", "Please select input and output files"
             )
@@ -744,14 +761,14 @@ class VideoConverterWindow(Adw.ApplicationWindow):
         hwaccel_name = selected_item.get_string().lower()
 
         # Update description
-        description = HW_ACCEL.get(hwaccel_name, HW_ACCEL["cpu"])["description"]
+        description = HW_ACCEL.get(hwaccel_name, HW_ACCEL["cpu"])[ "description"]
         combo.set_subtitle(description)
 
         current_codec = self.codec_combo.get_selected_item().value
         codec_family = CODECS[current_codec]["family"]
 
         # Update codec list
-        codec_list = HW_ACCEL.get(hwaccel_name, HW_ACCEL["cpu"])["codecs"]
+        codec_list = HW_ACCEL.get(hwaccel_name, HW_ACCEL["cpu"])[ "codecs"]
         store = self._get_codec_list(codec_list)
         self.codec_combo.set_model(store)
         for i, codec in enumerate(codec_list):
@@ -896,6 +913,9 @@ class VideoConverterWindow(Adw.ApplicationWindow):
         Raises:
             ValueError: If parameters are invalid
         """
+        if not self.input_file:
+            raise ValueError("Input file not selected")
+
         input_file = self.input_file
         output_file = self.output_file
 
