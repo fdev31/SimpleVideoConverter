@@ -140,21 +140,29 @@ class HintsLabel(Gtk.Box):
             margin_top=12,
         )
 
-        # Quality hint
+        hints_box = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL, spacing=12)
+        
+        # Quality hint (left aligned)
         quality_box = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL, spacing=6)
         self.quality_icon = Gtk.Image.new_from_icon_name("dialog-question-symbolic")
         self.quality_label = Gtk.Label(label="Quality: —", xalign=0)
         quality_box.append(self.quality_icon)
         quality_box.append(self.quality_label)
-        self.append(quality_box)
+        quality_box.set_halign(Gtk.Align.START)
 
-        # Speed hint
+        # Speed hint (right aligned)
         speed_box = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL, spacing=6)
         self.speed_icon = Gtk.Image.new_from_icon_name("dialog-question-symbolic")
         self.speed_label = Gtk.Label(label="Speed: —", xalign=0)
         speed_box.append(self.speed_icon)
         speed_box.append(self.speed_label)
-        self.append(speed_box)
+        speed_box.set_margin_end(12)
+        speed_box.set_halign(Gtk.Align.END)
+        speed_box.set_hexpand(True)
+
+        hints_box.append(quality_box)
+        hints_box.append(speed_box)
+        self.append(hints_box)
         if DEBUG:
             self.debug_label = Gtk.Label(label="", xalign=0)
             self.debug_label.set_wrap(True)
