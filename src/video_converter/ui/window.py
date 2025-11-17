@@ -60,7 +60,6 @@ class VideoConverterWindow(Adw.ApplicationWindow):
         self.video_fps = 24.0
         self.video_duration = 30.0
 
-        self.input_file = Path("./Input.mp4")
         self.output_file = Path("./output.mp4")
 
         # Main container
