@@ -41,6 +41,7 @@ from .widgets import (
     HintsLabel,
     PassesSlider,
     ScalingFactorScale,
+    TransformRow
 )
 
 
@@ -281,56 +282,16 @@ class VideoConverterWindow(Adw.ApplicationWindow):
         advanced_expander.set_expanded(False)
 
         # Rotation and Flip
-        transform_row = Adw.ActionRow(title="Rotation and Flip")
-        transform_row.set_tooltip_text("Rotate or flip the video.")
+        self.transform_row = TransformRow()
+        advanced_expander.add_row(self.transform_row)
 
-        transform_box = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL, spacing=12)
-        transform_box.set_halign(Gtk.Align.END)
-
-        rotation_box = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL, spacing=0)
-        rotation_box.add_css_class("linked")
-
-        self.rotation_none_button = Gtk.ToggleButton(label="0°")
-        self.rotation_none_button.set_active(True)
-
-        self.rotation_left_button = Gtk.ToggleButton()
-        self.rotation_left_button.set_icon_name("object-rotate-left-symbolic")
-        self.rotation_left_button.set_group(self.rotation_none_button)
-
-        self.rotation_right_button = Gtk.ToggleButton()
-        self.rotation_right_button.set_icon_name("object-rotate-right-symbolic")
-        self.rotation_right_button.set_group(self.rotation_none_button)
-
-        self.rotation_180_button = Gtk.ToggleButton(label="180°")
-        self.rotation_180_button.set_group(self.rotation_none_button)
-
-        rotation_box.append(self.rotation_none_button)
-        rotation_box.append(self.rotation_left_button)
-        rotation_box.append(self.rotation_right_button)
-        rotation_box.append(self.rotation_180_button)
-
-        flip_box = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL, spacing=0)
-        flip_box.add_css_class("linked")
-        self.flip_horizontal_button = Gtk.ToggleButton()
-        self.flip_horizontal_button.set_icon_name("object-flip-horizontal-symbolic")
-        self.flip_vertical_button = Gtk.ToggleButton()
-        self.flip_vertical_button.set_icon_name("object-flip-vertical-symbolic")
-        flip_box.append(self.flip_horizontal_button)
-        flip_box.append(self.flip_vertical_button)
-
-        transform_box.append(rotation_box)
-        transform_box.append(flip_box)
-
-        transform_row.add_suffix(transform_box)
-        transform_row.set_activatable_widget(transform_box)
-        advanced_expander.add_row(transform_row)
-
-        passes_expander = Adw.ExpanderRow(title="Number of Passes")
+        passes_expander = Adw.SpinRow(title="Number of Passes")
+        passes_expander.set_adjustment(Gtk.Adjustment.new(2, 2, 3, 1, 1, 0))
+        passes_expander.set_digits(0)
+        # passes_expander = Adw.ExpanderRow(title="Number of Passes")
         passes_expander.set_tooltip_text(
             "For VBR modes, use multiple passes for better quality and bitrate accuracy. More passes take longer."
         )
-        self.passes_slider = PassesSlider()
-        passes_expander.add_row(self.passes_slider)
         self.passes_expander = passes_expander
         advanced_expander.add_row(passes_expander)
 
@@ -956,7 +917,7 @@ class VideoConverterWindow(Adw.ApplicationWindow):
             if self.quality_combo.get_selected_item()
             else "balanced"
         )
-        passes = self.passes_slider.get_value()
+        passes = int(self.passes_expander.get_value())
 
         audio_codec_str = (
             self.audio_codec_combo.get_selected_item().get_string()
@@ -994,16 +955,10 @@ class VideoConverterWindow(Adw.ApplicationWindow):
             selected = widget.get_selected_item().get_string().lower()
             track_options[stream_index] = selected
 
-        flip_horizontal = self.flip_horizontal_button.get_active()
-        flip_vertical = self.flip_vertical_button.get_active()
+        flip_horizontal = self.transform_row.get_flip_vertical()
+        flip_vertical = self.transform_row.get_flip_vertical()
 
-        rotation_angle = 0
-        if self.rotation_left_button.get_active():
-            rotation_angle = 270
-        elif self.rotation_right_button.get_active():
-            rotation_angle = 90
-        elif self.rotation_180_button.get_active():
-            rotation_angle = 180
+        rotation_angle = self.transform_row.get_rotation()
 
         return {
             "input_file": input_file,

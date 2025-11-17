@@ -15,6 +15,119 @@ from ..utils import (
 from ..constants import CODEC_BPP_RATINGS, CONSTANT_QUALITY_INDEX, DEBUG, BLOCK_SIZE
 
 
+class TransformRow(Adw.ActionRow):
+    """Custom ActionRow widget for video rotation and flip selection."""
+
+    def __init__(self):
+        super().__init__()
+        
+        self.set_title("Rotation and Flip")
+        self.set_tooltip_text("Rotate or flip the video.")
+        
+        # Container for transform controls
+        transform_box = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL, spacing=12)
+        transform_box.set_halign(Gtk.Align.END)
+        
+        # Rotation controls
+        rotation_box = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL, spacing=0)
+        rotation_box.add_css_class("linked")
+        
+        self.rotation_none_button = Gtk.ToggleButton(label="0°")
+        self.rotation_none_button.set_active(True)
+        self.rotation_none_button.set_tooltip_text("No rotation")
+        
+        self.rotation_left_button = Gtk.ToggleButton()
+        self.rotation_left_button.set_icon_name("object-rotate-left-symbolic")
+        self.rotation_left_button.set_group(self.rotation_none_button)
+        self.rotation_left_button.set_tooltip_text("Rotate 90° counter-clockwise")
+        
+        self.rotation_right_button = Gtk.ToggleButton()
+        self.rotation_right_button.set_icon_name("object-rotate-right-symbolic")
+        self.rotation_right_button.set_group(self.rotation_none_button)
+        self.rotation_right_button.set_tooltip_text("Rotate 90° clockwise")
+        
+        self.rotation_180_button = Gtk.ToggleButton(label="180°")
+        self.rotation_180_button.set_group(self.rotation_none_button)
+        self.rotation_180_button.set_tooltip_text("Rotate 180°")
+        
+        rotation_box.append(self.rotation_none_button)
+        rotation_box.append(self.rotation_left_button)
+        rotation_box.append(self.rotation_right_button)
+        rotation_box.append(self.rotation_180_button)
+        
+        # Flip controls
+        flip_box = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL, spacing=0)
+        flip_box.add_css_class("linked")
+        
+        self.flip_horizontal_button = Gtk.ToggleButton()
+        self.flip_horizontal_button.set_icon_name("object-flip-horizontal-symbolic")
+        self.flip_horizontal_button.set_tooltip_text("Flip horizontally")
+        
+        self.flip_vertical_button = Gtk.ToggleButton()
+        self.flip_vertical_button.set_icon_name("object-flip-vertical-symbolic")
+        self.flip_vertical_button.set_tooltip_text("Flip vertically")
+        
+        flip_box.append(self.flip_horizontal_button)
+        flip_box.append(self.flip_vertical_button)
+        
+        # Add to main container
+        transform_box.append(rotation_box)
+        transform_box.append(flip_box)
+        
+        self.add_suffix(transform_box)
+        self.set_activatable_widget(transform_box)
+    
+    def get_rotation(self) -> int:
+        """Get the selected rotation angle.
+        
+        Returns:
+            Rotation angle: 0, -90, 90, or 180 degrees
+        """
+        if self.rotation_left_button.get_active():
+            return 270
+        elif self.rotation_right_button.get_active():
+            return 90
+        elif self.rotation_180_button.get_active():
+            return 180
+        return 0
+    
+    def set_rotation(self, angle: int) -> None:
+        """Set the rotation angle.
+        
+        Args:
+            angle: Rotation angle (0, -90, 90, or 180)
+        """
+        button_map = {
+            0: self.rotation_none_button,
+            -90: self.rotation_left_button,
+            90: self.rotation_right_button,
+            180: self.rotation_180_button,
+        }
+        button = button_map.get(angle, self.rotation_none_button)
+        button.set_active(True)
+    
+    def get_flip_horizontal(self) -> bool:
+        """Get horizontal flip state."""
+        return self.flip_horizontal_button.get_active()
+    
+    def set_flip_horizontal(self, flipped: bool) -> None:
+        """Set horizontal flip state."""
+        self.flip_horizontal_button.set_active(flipped)
+    
+    def get_flip_vertical(self) -> bool:
+        """Get vertical flip state."""
+        return self.flip_vertical_button.get_active()
+    
+    def set_flip_vertical(self, flipped: bool) -> None:
+        """Set vertical flip state."""
+        self.flip_vertical_button.set_active(flipped)
+    
+    def reset(self) -> None:
+        """Reset all transform controls to default state."""
+        self.rotation_none_button.set_active(True)
+        self.flip_horizontal_button.set_active(False)
+        self.flip_vertical_button.set_active(False)
+
 class HintsLabel(Gtk.Box):
     """Label showing quality/speed hints with icons and colors."""
 
