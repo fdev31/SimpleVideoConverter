@@ -27,6 +27,7 @@ from ..utils import (
     detect_codec_from_extension,
     detect_container_from_extension,
     detect_hardware_acceleration,
+    format_duration,
     format_file_size,
     get_audio_codec_name,
     get_codec_properties,
@@ -824,12 +825,28 @@ class VideoConverterWindow(Adw.ApplicationWindow):
 
         mode = self.mode_keys[self.mode_combo.get_selected()]
 
-        # For CQ mode, try to parse ffmpeg output for time progress
-        # This requires capturing ffmpeg output progressively
+        # For CQ mode, estimate progress based on time
         if mode == EncodingModes.cq.name:
-            # Parse stderr for time= progress
-            # This requires capturing ffmpeg output progressively
-            self.progress_bar.pulse()
+            if hasattr(self, "encoding_start_time") and hasattr(self, "video_duration"):
+                elapsed = time.time() - self.encoding_start_time
+
+                # Try to get current encode time from ffmpeg process
+                # We'll estimate based on typical encoding speed
+                # Assume encoding takes 1.5x to 3x the video duration
+                estimated_total = self.hints_label.estimated_compression_time
+
+                if elapsed < estimated_total:
+                    fraction = elapsed / estimated_total
+                    remaining = estimated_total - elapsed
+                    self.progress_bar.set_fraction(min(0.95, fraction))
+                    self.progress_bar.set_text(
+                        f"{fraction:.0%} - {format_duration(int(remaining))} remaining (estimated)"
+                    )
+                else:
+                    self.progress_bar.pulse()
+                    self.progress_bar.set_text("Finalizing...")
+            else:
+                self.progress_bar.pulse()
             return True
 
         if not hasattr(self, "output_file") or self.estimated_size_bytes <= 0:
@@ -864,7 +881,7 @@ class VideoConverterWindow(Adw.ApplicationWindow):
                     estimated_total = elapsed / fraction
                     remaining = estimated_total - elapsed
                     self.progress_bar.set_text(
-                        f"{fraction:.0%} - {int(remaining // 60)}m {int(remaining % 60)}s remaining"
+                        f"{fraction:.0%} - {format_duration(int(remaining))} remaining"
                     )
             else:
                 self.progress_bar.set_text(f"{fraction:.0%}")
@@ -1038,6 +1055,7 @@ class VideoConverterWindow(Adw.ApplicationWindow):
         """Run the conversion."""
         try:
             self.is_encoding = True
+            self.encoding_start_time = time.time()
 
             GLib.idle_add(self.log_output, "=== Video Converter Started ===")
 

@@ -140,6 +140,7 @@ class HintsLabel(Gtk.Box):
             margin_bottom=12,
             margin_top=12,
         )
+        self.estimated_compression_time = 60
 
         hints_box = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL, spacing=12)
 
@@ -249,7 +250,8 @@ class HintsLabel(Gtk.Box):
         espeed, etime, speed_rating = estimate_encoding_speed(
             codec, quality_preset, width, height, fps, cq_level, hwaccel=hwaccel
         )
-        time_str = format_duration(etime * video_duration / COMPUTER_SPEED_FACTOR)
+        self.estimated_compression_time = etime * video_duration / COMPUTER_SPEED_FACTOR
+        time_str = format_duration(self.estimated_compression_time)
         speed_text = f"Speed: {speed_rating} (Est: {time_str})"
         self.speed_label.set_label(speed_text)
 
