@@ -76,18 +76,18 @@ class VideoConverterWindow(Adw.ApplicationWindow):
         header_bar = Adw.HeaderBar()
         header_bar.set_title_widget(view_switcher)
 
+        # Action button on the left side of header
+        self.action_button = Gtk.Button()
+        self.action_button.connect("clicked", self.on_action_clicked)
+        self.set_action_mode(True)
+        header_bar.pack_start(self.action_button)
+
         # Progress bar in header (center-left area)
         self.progress_bar = Gtk.ProgressBar()
         self.progress_bar.set_show_text(True)
         self.progress_bar.set_size_request(200, -1)
         self.progress_bar.set_visible(False)
         header_bar.pack_start(self.progress_bar)
-
-        # Action buttons on the right side of header
-        self.action_button = Gtk.Button()
-        self.action_button.connect("clicked", self.on_action_clicked)
-        self.set_action_mode(True)
-        header_bar.pack_end(self.action_button)
 
         main_container.append(header_bar)
 
