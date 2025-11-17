@@ -110,6 +110,8 @@ class VideoConverterWindow(Adw.ApplicationWindow):
 
         # Input
         input_box = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=6)
+        input_box.set_hexpand(True)
+        input_box.set_vexpand(True)
         box.append(input_box)
 
         input_label = Gtk.Label(label="<b>Video to convert</b>", use_markup=True, xalign=0)
@@ -353,6 +355,8 @@ class VideoConverterWindow(Adw.ApplicationWindow):
         output_box.set_margin_bottom(6)
         output_box.set_margin_start(12)
         output_box.set_margin_end(12)
+        output_box.set_hexpand(True)
+        output_box.set_vexpand(True)
 
         output_label = Gtk.Label(xalign=0)
         output_label.set_markup("<b>Conversion Output</b>")
