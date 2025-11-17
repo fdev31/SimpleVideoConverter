@@ -21,6 +21,7 @@ Linux only.
 - **Multi-pass Encoding**: Support for multi-pass encoding for improved quality
 - **Progress Tracking**: Real-time progress updates during conversion
 - **Quality Presets**: Choose between encoding speed and efficiency
+- **Transformations**: Rotate or flip the video, select which tracks to keep, skip or re-encode
 
   <!--- **Drag and Drop**: Conveniently drag video files into the application -->
 
