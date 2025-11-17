@@ -153,19 +153,18 @@ def get_video_duration(input_file):
 
 
 def get_video_properties(input_file):
-    """Get video width, height, and fps using ffprobe."""
+    """Get video width, height, fps, and stream info using ffprobe."""
+    import json
+
     try:
         result = subprocess.run(
             [
                 "ffprobe",
                 "-v",
-                "error",
-                "-select_streams",
-                "v:0",
-                "-show_entries",
-                "stream=width,height,r_frame_rate",
-                "-of",
-                "csv=p=0",
+                "quiet",
+                "-print_format",
+                "json",
+                "-show_streams",
                 input_file,
             ],
             capture_output=True,
@@ -173,15 +172,37 @@ def get_video_properties(input_file):
             check=True,
             timeout=10,
         )
-        parts = result.stdout.strip().split(",")
-        width = int(parts[0])
-        height = int(parts[1])
-        # fps_fraction like "24/1" or "30000/1001"
-        fps_parts = parts[2].split("/")
-        fps = float(fps_parts[0]) / float(fps_parts[1]) if len(fps_parts) > 1 else 24.0
-        return width, height, fps
+        data = json.loads(result.stdout)
+        streams = data.get("streams", [])
+
+        video_stream = next(
+            (s for s in streams if s.get("codec_type") == "video"), None
+        )
+        if not video_stream:
+            return None, None, None, []
+
+        width = int(video_stream.get("width", 0))
+        height = int(video_stream.get("height", 0))
+
+        r_frame_rate = video_stream.get("r_frame_rate", "0/1")
+        if "/" in r_frame_rate:
+            num, den = r_frame_rate.split("/")
+            fps = float(num) / float(den) if float(den) != 0 else 24.0
+        else:
+            fps = float(r_frame_rate)
+
+        # Filter for just audio and subtitle streams to return
+        track_streams = [
+            s
+            for s in streams
+            if s.get("codec_type") in ("audio", "subtitle")
+        ]
+
+        return width, height, fps, track_streams
+    except (subprocess.CalledProcessError, json.JSONDecodeError, FileNotFoundError):
+        return None, None, None, []
     except Exception:
-        return None, None, None
+        return None, None, None, []
 
 
 def get_hw_accels():
@@ -310,9 +331,12 @@ def build_ffmpeg_command(
     pass_num: int | None = None,
     is_cq: bool = False,
     cq_level: str | None = None,
-    audio_mode: str = "transcode",
     audio_codec: str = "aac",
     hwaccel: str | None = None,
+    track_options: dict | None = None,
+    flip_horizontal: bool = False,
+    flip_vertical: bool = False,
+    rotation_angle: int = 0,
 ):
     """Build ffmpeg command."""
     cmd = ["ffmpeg"]
@@ -338,6 +362,18 @@ def build_ffmpeg_command(
             vf_options.append(f"scale_vaapi=w=iw*{scale_factor}:h=ih*{scale_factor}")
     elif scale_factor != 1.0:
         vf_options.append(f"scale=iw*{scale_factor}:ih*{scale_factor}")
+
+    if flip_horizontal:
+        vf_options.append("hflip")
+    if flip_vertical:
+        vf_options.append("vflip")
+
+    if rotation_angle == 90:
+        vf_options.append("transpose=1")
+    elif rotation_angle == 180:
+        vf_options.append("transpose=2,transpose=2")
+    elif rotation_angle == 270:
+        vf_options.append("transpose=2")
 
     if vf_options:
         cmd.extend(["-vf", ",".join(vf_options)])
@@ -371,14 +407,25 @@ def build_ffmpeg_command(
         if is_vbr:
             cmd.extend(["-pass", str(pass_num)])
 
-    if audio_mode == "disable":
-        cmd.append("-an")
-    elif audio_mode == "copy":
-        cmd.extend(["-c:a", "copy"])
-    elif audio_bitrate == 0:
-        cmd.append("-an")
-    else:
-        cmd.extend(["-c:a", audio_codec, "-b:a", f"{audio_bitrate}k"])
+    # Track mapping
+    cmd.extend(["-map", "0:v:0"])  # Always map the first video track
+    audio_track_count = 1
+    if track_options:
+        for stream_index, action in track_options.items():
+            if action != "skip":
+                cmd.extend(["-map", f"0:{stream_index}"])
+                if action == "copy":
+                    cmd.extend([f"-c:{audio_track_count}", "copy"])
+                elif action == "re-encode":
+                    cmd.extend(
+                        [
+                            f"-c:{audio_track_count}",
+                            audio_codec,
+                            f"-b:{audio_track_count}",
+                            f"{audio_bitrate}k",
+                        ]
+                    )
+                audio_track_count += 1
 
     cmd.extend(["-movflags", "+faststart", "-f", container, output_file])
 

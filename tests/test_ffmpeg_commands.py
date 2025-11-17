@@ -20,6 +20,20 @@ class TestFfmpegCommands(unittest.TestCase):
         with patch("gi.repository.GLib.timeout_add"):
             cls.app.do_startup()
         cls.window = cls.app.win
+        cls.window.track_widgets = [
+            {
+                "widget": Adw.ComboRow(
+                    model=Gtk.StringList.new(["Copy", "Re-encode", "Skip"])
+                ),
+                "stream_index": 1,
+                "codec_type": "audio",
+            },
+            {
+                "widget": Adw.ComboRow(model=Gtk.StringList.new(["Copy", "Skip"])),
+                "stream_index": 2,
+                "codec_type": "subtitle",
+            },
+        ]
 
     @classmethod
     def tearDownClass(cls):
@@ -34,8 +48,38 @@ class TestFfmpegCommands(unittest.TestCase):
 
     @patch("pathlib.Path.is_file", return_value=True)
     @patch("video_converter.ui.window.get_video_duration", return_value=30)
+    def test_track_selection_commands(self, mock_get_video_duration, mock_is_file):
+        # Test copy audio, skip subtitle
+        self.window.track_widgets[0]["widget"].set_selected(0)  # Copy
+        self.window.track_widgets[1]["widget"].set_selected(1)  # Skip
+        command = " ".join(self.window.get_ffmpeg_command())
+        self.assertIn("-map 0:1", command)
+        self.assertIn("-c:0 copy", command)
+        self.assertNotIn("-map 0:2", command)
+
+        # Test re-encode audio, copy subtitle
+        self.window.track_widgets[0]["widget"].set_selected(1)  # Re-encode
+        self.window.track_widgets[1]["widget"].set_selected(0)  # Copy
+        command = " ".join(self.window.get_ffmpeg_command())
+        self.assertIn("-map 0:1", command)
+        self.assertIn("-c:0 libopus -b:0 128k", command)
+        self.assertIn("-map 0:2", command)
+        self.assertIn("-c:1 copy", command)
+
+        # Test skip audio, copy subtitle
+        self.window.track_widgets[0]["widget"].set_selected(2)  # Skip
+        self.window.track_widgets[1]["widget"].set_selected(0)  # Copy
+        command = " ".join(self.window.get_ffmpeg_command())
+        self.assertNotIn("-map 0:1", command)
+        self.assertIn("-map 0:2", command)
+        self.assertIn("-c:0 copy", command)
+
+    @patch("pathlib.Path.is_file", return_value=True)
+    @patch("video_converter.ui.window.get_video_duration", return_value=30)
     def test_all_setting_combinations_produce_unique_commands(
-        self, mock_get_video_duration, mock_is_file
+        self,
+        mock_get_video_duration,
+        mock_is_file,
     ):
         generated_commands = {}
 

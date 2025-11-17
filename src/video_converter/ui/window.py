@@ -7,9 +7,10 @@ import subprocess
 import sys
 import threading
 import time
+from functools import partial
 from pathlib import Path
 
-from gi.repository import Adw, Gdk, GLib, Gtk, GObject, Gio
+from gi.repository import Adw, Gdk, GLib, GObject, Gtk
 
 from ..constants import (
     AUDIO_CODECS,
@@ -19,7 +20,7 @@ from ..constants import (
     HW_ACCEL,
     EncodingModes,
 )
-from ..models import get_ItemList, ListItem
+from ..models import ListItem, get_ItemList
 from ..utils import (
     build_ffmpeg_command,
     calculate_bitrate,
@@ -64,7 +65,7 @@ class VideoConverterWindow(Adw.ApplicationWindow):
         self.video_duration = 30.0
 
         self.input_file = Path("./Input.mp4")
-        self.output_file = Path("./tmp/output.mp4")
+        self.output_file = Path("./output.mp4")
 
         # Main container
         main_container = Gtk.Box(orientation=Gtk.Orientation.VERTICAL)
@@ -139,6 +140,9 @@ class VideoConverterWindow(Adw.ApplicationWindow):
 
         # Encoding section
         encoding_mode_action_row = Adw.ActionRow(title="Encoding Mode")
+        encoding_mode_action_row.add_prefix(
+            Gtk.Image.new_from_icon_name("applications-science-symbolic")
+        )
         files_group.add(encoding_mode_action_row)
 
         self.scale_factor_scale = ScalingFactorScale()
@@ -150,6 +154,7 @@ class VideoConverterWindow(Adw.ApplicationWindow):
         debug_hints = Adw.PreferencesRow()
         debug_hints.set_child(self.hints_label)
         files_group.add(debug_hints)
+        encoding_mode_action_row.set_subtitle("Fixed file size or Quality driven")
 
         controls_box = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL, spacing=12)
         encoding_mode_action_row.add_suffix(controls_box)
@@ -275,6 +280,51 @@ class VideoConverterWindow(Adw.ApplicationWindow):
         settings_box.append(advanced_group)
         advanced_expander.set_expanded(False)
 
+        # Rotation and Flip
+        transform_row = Adw.ActionRow(title="Rotation and Flip")
+        transform_row.set_tooltip_text("Rotate or flip the video.")
+
+        transform_box = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL, spacing=12)
+        transform_box.set_halign(Gtk.Align.END)
+
+        rotation_box = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL, spacing=0)
+        rotation_box.add_css_class("linked")
+
+        self.rotation_none_button = Gtk.ToggleButton(label="0°")
+        self.rotation_none_button.set_active(True)
+
+        self.rotation_left_button = Gtk.ToggleButton()
+        self.rotation_left_button.set_icon_name("object-rotate-left-symbolic")
+        self.rotation_left_button.set_group(self.rotation_none_button)
+
+        self.rotation_right_button = Gtk.ToggleButton()
+        self.rotation_right_button.set_icon_name("object-rotate-right-symbolic")
+        self.rotation_right_button.set_group(self.rotation_none_button)
+
+        self.rotation_180_button = Gtk.ToggleButton(label="180°")
+        self.rotation_180_button.set_group(self.rotation_none_button)
+
+        rotation_box.append(self.rotation_none_button)
+        rotation_box.append(self.rotation_left_button)
+        rotation_box.append(self.rotation_right_button)
+        rotation_box.append(self.rotation_180_button)
+
+        flip_box = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL, spacing=0)
+        flip_box.add_css_class("linked")
+        self.flip_horizontal_button = Gtk.ToggleButton()
+        self.flip_horizontal_button.set_icon_name("object-flip-horizontal-symbolic")
+        self.flip_vertical_button = Gtk.ToggleButton()
+        self.flip_vertical_button.set_icon_name("object-flip-vertical-symbolic")
+        flip_box.append(self.flip_horizontal_button)
+        flip_box.append(self.flip_vertical_button)
+
+        transform_box.append(rotation_box)
+        transform_box.append(flip_box)
+
+        transform_row.add_suffix(transform_box)
+        transform_row.set_activatable_widget(transform_box)
+        advanced_expander.add_row(transform_row)
+
         passes_expander = Adw.ExpanderRow(title="Number of Passes")
         passes_expander.set_tooltip_text(
             "For VBR modes, use multiple passes for better quality and bitrate accuracy. More passes take longer."
@@ -284,16 +334,18 @@ class VideoConverterWindow(Adw.ApplicationWindow):
         self.passes_expander = passes_expander
         advanced_expander.add_row(passes_expander)
 
-        audio_mode_model = Gtk.StringList.new(
-            ["Re-encode", "Copy Original", "Disable Audio"]
+        # Track selection
+        self.tracks_expander = Adw.ExpanderRow(title="Audio tracks &amp; Subtitles")
+        self.tracks_expander.set_tooltip_text(
+            "Select which audio and subtitle tracks to include in the output."
         )
-        self.audio_mode_combo = Adw.ComboRow(model=audio_mode_model, title="Audio Mode")
-        self.audio_mode_combo.set_tooltip_text(
-            "Choose how to handle the audio track. 'Re-encode' re-encodes the audio, 'Copy Original' copies it without changes, and 'Disable Audio' removes it."
+        self.track_widgets = []
+        self.no_tracks_row = Adw.ActionRow(
+            title="Load a video to see available tracks."
         )
-        self.audio_mode_combo.set_selected(1)
-        self.audio_mode_combo.connect("notify::selected", self.on_audio_mode_changed)
-        advanced_expander.add_row(self.audio_mode_combo)
+        self.tracks_expander.add_row(self.no_tracks_row)
+        advanced_expander.add_row(self.tracks_expander)
+
 
         audio_codec_model = Gtk.StringList.new(list(AUDIO_CODECS.keys()))
         self.audio_codec_combo = Adw.ComboRow(
@@ -368,7 +420,6 @@ class VideoConverterWindow(Adw.ApplicationWindow):
         self.add_controller(drop_target)  # Add to window, not container
 
         self.on_mode_changed(None, None)
-        self.on_audio_mode_changed(None, None)
 
     def _handle_new_input_file(self, path):
         """Handles all the logic for when a new input file is selected,
@@ -381,9 +432,17 @@ class VideoConverterWindow(Adw.ApplicationWindow):
             # Reset output file when input changes
             self.output_row.set_subtitle("No file selected")
 
+            # Clear existing track widgets
+            if hasattr(self, "no_tracks_row") and self.no_tracks_row:
+                self.tracks_expander.remove(self.no_tracks_row)
+                self.no_tracks_row = None
+            for track_info in self.track_widgets:
+                self.tracks_expander.remove(track_info["widget"])
+            self.track_widgets = []
+
             # Get video properties
             try:
-                width, height, fps = get_video_properties(path)
+                width, height, fps, streams = get_video_properties(path)
                 if width and height and fps:
                     self.video_width = width
                     self.video_height = height
@@ -393,6 +452,39 @@ class VideoConverterWindow(Adw.ApplicationWindow):
                 duration = get_video_duration(path)
                 if duration and duration > 0:
                     self.video_duration = duration
+
+                # Populate track selection UI
+                if not streams:
+                    self.no_tracks_row = Adw.ActionRow(
+                        title="No audio or subtitle tracks found."
+                    )
+                    self.tracks_expander.add_row(self.no_tracks_row)
+                else:
+                    for stream in streams:
+                        stream_index = stream.get("index", "N/A")
+                        codec_type = stream.get("codec_type", "unknown")
+                        codec_name = stream.get("codec_name", "unknown")
+                        lang = stream.get("tags", {}).get("language", "und")
+
+                        label = f"{codec_type.title()} #{stream_index} ({lang}, {codec_name})"
+
+                        if codec_type == "audio":
+                            model = Gtk.StringList.new(["Copy", "Re-encode", "Skip"])
+                        else:
+                            model = Gtk.StringList.new(["Copy", "Skip"])
+
+                        combo = Adw.ComboRow(title=label, model=model)
+                        combo.set_selected(0)  # Default to "Copy"
+                        combo.connect("notify::selected-item", self._on_settings_changed)
+
+                        self.tracks_expander.add_row(combo)
+                        self.track_widgets.append(
+                            {
+                                "widget": combo,
+                                "stream_index": stream_index,
+                                "codec_type": codec_type,
+                            }
+                        )
 
                 self._on_settings_changed()
             except Exception as e:
@@ -541,21 +633,23 @@ class VideoConverterWindow(Adw.ApplicationWindow):
             )
             # show ffmpeg command
             self.hints_label.debug(" ".join(self.get_ffmpeg_command()))
+
+            # Update sensitivity of audio codec and bitrate based on track selections
+            has_audio_reencode = False
+            for track_info in self.track_widgets:
+                if track_info["codec_type"] == "audio":
+                    selected_action = track_info["widget"].get_selected_item().get_string().lower()
+                    if selected_action == "re-encode":
+                        has_audio_reencode = True
+                        break
+
+            self.audio_codec_combo.set_sensitive(has_audio_reencode)
+            self.audio_expander.set_sensitive(has_audio_reencode)
+            self.audio_expander.set_enable_expansion(has_audio_reencode)
+
         except (ValueError, AttributeError) as e:
             print(e)
             pass
-
-    def on_audio_mode_changed(self, widget, _):
-        """Handle audio mode changes."""
-        if not hasattr(self, "audio_mode_combo"):
-            return
-
-        selected_index = self.audio_mode_combo.get_selected()
-        is_transcode = selected_index == 0
-
-        self.audio_expander.set_sensitive(is_transcode)
-        self.audio_expander.set_enable_expansion(is_transcode)
-        self.audio_codec_combo.set_sensitive(is_transcode)
 
     def on_mode_changed(self, widget, _):
         if not hasattr(self, "mode_combo"):
@@ -864,10 +958,6 @@ class VideoConverterWindow(Adw.ApplicationWindow):
         )
         passes = self.passes_slider.get_value()
 
-        audio_mode_index = self.audio_mode_combo.get_selected()
-        audio_mode_map = ["transcode", "copy", "disable"]
-        audio_mode = audio_mode_map[audio_mode_index]
-
         audio_codec_str = (
             self.audio_codec_combo.get_selected_item().get_string()
             if self.audio_codec_combo.get_selected_item()
@@ -897,6 +987,24 @@ class VideoConverterWindow(Adw.ApplicationWindow):
         is_vbr = "vbr" in mode
         actual_passes = passes if is_vbr else 1
 
+        track_options = {}
+        for track_info in self.track_widgets:
+            widget = track_info["widget"]
+            stream_index = track_info["stream_index"]
+            selected = widget.get_selected_item().get_string().lower()
+            track_options[stream_index] = selected
+
+        flip_horizontal = self.flip_horizontal_button.get_active()
+        flip_vertical = self.flip_vertical_button.get_active()
+
+        rotation_angle = 0
+        if self.rotation_left_button.get_active():
+            rotation_angle = 270
+        elif self.rotation_right_button.get_active():
+            rotation_angle = 90
+        elif self.rotation_180_button.get_active():
+            rotation_angle = 180
+
         return {
             "input_file": input_file,
             "output_file": output_file,
@@ -907,7 +1015,6 @@ class VideoConverterWindow(Adw.ApplicationWindow):
             "audio_bitrate": audio_bitrate,
             "scale_factor": scale_factor,
             "quality": quality,
-            "audio_mode": audio_mode,
             "audio_codec": audio_codec,
             "is_cq": is_cq,
             "cq_level": cq_level,
@@ -915,6 +1022,10 @@ class VideoConverterWindow(Adw.ApplicationWindow):
             "actual_passes": actual_passes,
             "duration": duration,
             "mode": mode,
+            "track_options": track_options,
+            "flip_horizontal": flip_horizontal,
+            "flip_vertical": flip_vertical,
+            "rotation_angle": rotation_angle,
         }
 
     def get_ffmpeg_command(self, pass_num=None):
@@ -952,9 +1063,12 @@ class VideoConverterWindow(Adw.ApplicationWindow):
             pass_num=actual_pass_num,
             is_cq=params["is_cq"],
             cq_level=params["cq_level"],
-            audio_mode=params["audio_mode"],
             audio_codec=params["audio_codec"],
             hwaccel=params["hwaccel"],
+            track_options=params["track_options"],
+            flip_horizontal=params["flip_horizontal"],
+            flip_vertical=params["flip_vertical"],
+            rotation_angle=params["rotation_angle"],
         )
 
         return cmd
@@ -986,7 +1100,6 @@ class VideoConverterWindow(Adw.ApplicationWindow):
             container = params["container"]
             quality = params["quality"]
             scale_factor = params["scale_factor"]
-            audio_mode = params["audio_mode"]
             audio_codec = params["audio_codec"]
             audio_bitrate = params["audio_bitrate"]
             video_bitrate = params["video_bitrate"]
@@ -1003,9 +1116,12 @@ class VideoConverterWindow(Adw.ApplicationWindow):
             GLib.idle_add(self.log_output, f"Container: {container}")
             GLib.idle_add(self.log_output, f"Quality: {quality}")
             GLib.idle_add(self.log_output, f"Scale factor: {scale_factor:.2f}")
-            GLib.idle_add(self.log_output, f"Audio mode: {audio_mode}")
 
-            if audio_mode == "transcode":
+            if "re-encode" in [
+                track["widget"].get_selected_item().get_string().lower()
+                for track in self.track_widgets
+                if track["codec_type"] == "audio"
+            ]:
                 GLib.idle_add(self.log_output, f"Audio codec: {audio_codec}")
                 GLib.idle_add(self.log_output, f"Audio bitrate: {audio_bitrate}kbps")
 
@@ -1031,12 +1147,15 @@ class VideoConverterWindow(Adw.ApplicationWindow):
                 mode != EncodingModes.cq.name
             ):  # Constant Bitrate or Variable Bitrate modes
                 effective_audio_bitrate = 0
-                if audio_mode == "transcode":
-                    effective_audio_bitrate = audio_bitrate
-                elif audio_mode == "copy":
-                    effective_audio_bitrate = (
-                        self.audio_scale.get_value()
-                    )  # Approximation
+                for track in self.track_widgets:
+                    if track["codec_type"] == "audio":
+                        action = track["widget"].get_selected_item().get_string().lower()
+                        if action == "re-encode":
+                            effective_audio_bitrate += audio_bitrate
+                        elif action == "copy":
+                            effective_audio_bitrate += (
+                                self.audio_scale.get_value()
+                            )  # Approximation
 
                 total_bitrate_kbps = video_bitrate + effective_audio_bitrate
                 self.estimated_size_bytes = (
@@ -1071,74 +1190,52 @@ class VideoConverterWindow(Adw.ApplicationWindow):
             if output_file.is_file():
                 output_file.unlink()
 
+            ffmpeg_command = partial(
+                build_ffmpeg_command,
+                str(input_file.absolute()),
+                str(output_file.absolute()),
+                codec,
+                container,
+                video_bitrate,
+                audio_bitrate,
+                scale_factor,
+                quality=quality,
+                is_vbr=is_vbr,
+                is_cq=is_cq,
+                cq_level=cq_level,
+                audio_codec=audio_codec,
+                hwaccel=params["hwaccel"],
+                track_options=params["track_options"],
+                flip_horizontal=params["flip_horizontal"],
+                flip_vertical=params["flip_vertical"],
+                rotation_angle=params["rotation_angle"],
+            )
             if is_vbr and actual_passes > 1:
-                GLib.idle_add(
-                    self.log_output,
-                    f"Multi-pass VBR Encoding ({actual_passes} passes)\n",
-                )
-
-                for pass_num in range(1, actual_passes + 1):
-                    if not self.is_encoding:
-                        break
-
-                    GLib.idle_add(
-                        self.log_output, f"--- Pass {pass_num} of {actual_passes} ---"
-                    )
-
-                    cmd = build_ffmpeg_command(
-                        str(input_file.absolute()),
-                        str(output_file.absolute()),
-                        codec,
-                        container,
-                        video_bitrate,
-                        audio_bitrate,
-                        scale_factor,
-                        quality=quality,
-                        is_vbr=True,
-                        pass_num=pass_num,
-                        is_cq=is_cq,
-                        cq_level=cq_level,
-                        audio_mode=audio_mode,
-                        audio_codec=audio_codec,
-                        hwaccel=params["hwaccel"],
-                    )
-
-                    if pass_num < actual_passes:
-                        cmd[-1] = "/dev/null"
-                        cmd.insert(-1, "-y")
-
-                    return_code, _, stderr = run_ffmpeg_process(cmd)
-
-                    if return_code != 0:
-                        if self.is_encoding:  # Don't show error if canceled
-                            GLib.idle_add(
-                                self.log_output, f"Error at pass {pass_num}: {stderr}"
-                            )
-                        return
-
+                pass_list = range(1, actual_passes + 1)
             else:
-                cmd = build_ffmpeg_command(
-                    str(input_file.absolute()),
-                    str(output_file.absolute()),
-                    codec,
-                    container,
-                    video_bitrate,
-                    audio_bitrate,
-                    scale_factor,
-                    quality=quality,
-                    is_vbr=is_vbr,
-                    is_cq=is_cq,
-                    cq_level=cq_level,
-                    audio_mode=audio_mode,
-                    audio_codec=audio_codec,
-                    hwaccel=params["hwaccel"],
+                pass_list = [None]
+
+            for pass_num in pass_list:
+                if not self.is_encoding:
+                    break
+
+                GLib.idle_add(
+                    self.log_output, f"--- Pass {pass_num} of {actual_passes} ---"
                 )
+
+                cmd = ffmpeg_command(pass_num=pass_num)
+
+                if pass_num is not None and pass_num < actual_passes:
+                    cmd[-1] = "/dev/null"
+                    cmd.insert(-1, "-y")
 
                 return_code, _, stderr = run_ffmpeg_process(cmd)
 
                 if return_code != 0:
-                    if self.is_encoding:
-                        GLib.idle_add(self.log_output, f"Error: {stderr}")
+                    if self.is_encoding:  # Don't show error if canceled
+                        GLib.idle_add(
+                            self.log_output, f"Error at pass {pass_num}: {stderr}"
+                        )
                     return
 
             if not self.is_encoding:

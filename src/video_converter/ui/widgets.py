@@ -164,6 +164,7 @@ class AudioBitrateScale(Gtk.Box):
         self.scale.set_draw_value(True)
         self.scale.set_value_pos(Gtk.PositionType.RIGHT)
         self.scale.set_hexpand(True)
+        self.scale.set_digits(0)
 
         for bitrate in POPULAR_AUDIO_BITRATES:
             self.scale.add_mark(bitrate, Gtk.PositionType.BOTTOM, None)

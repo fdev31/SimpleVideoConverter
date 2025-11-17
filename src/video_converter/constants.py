@@ -10,10 +10,10 @@ CONSTANT_QUALITY_INDEX = 4
 
 
 class EncodingModes(StrEnum):
-    target_size = "Target File Size MB"
-    target_size_vbr = "Target File Size MB (VBR)"
-    cbr = "Fixed Bitrate Kbkps (CBR)"
-    vbr = "Average Bitrate Kbps (VBR)"
+    target_size = "Target File Size (MB)"
+    target_size_vbr = "Target File Size (MB) - multipass"
+    cbr = "Constant Bitrate (Kb/s)"
+    vbr = "Average Bitrate (Kb/s) - multipass"
     cq = "Constant Quality"
 
 
