@@ -127,7 +127,10 @@ class VideoConverterWindow(Adw.ApplicationWindow):
         input_browse_button.set_valign(Gtk.Align.CENTER)
         input_browse_button.connect("clicked", self.on_input_browse)
         self.input_row.add_suffix(input_browse_button)
-        self.input_row.set_activatable_widget(input_browse_button)
+
+        input_click_controller = Gtk.GestureClick.new()
+        input_click_controller.connect("released", self._on_input_row_clicked)
+        self.input_row.add_controller(input_click_controller)
         input_box.append(self.input_row)
 
         # Output
@@ -149,7 +152,10 @@ class VideoConverterWindow(Adw.ApplicationWindow):
         output_browse_button.set_valign(Gtk.Align.CENTER)
         output_browse_button.connect("clicked", self.on_output_browse)
         self.output_row.add_suffix(output_browse_button)
-        self.output_row.set_activatable_widget(output_browse_button)
+
+        output_click_controller = Gtk.GestureClick.new()
+        output_click_controller.connect("released", self._on_output_row_clicked)
+        self.output_row.add_controller(output_click_controller)
         output_box.append(self.output_row)
 
         # Encoding section
@@ -679,6 +685,12 @@ class VideoConverterWindow(Adw.ApplicationWindow):
                 pass
 
         dialog.open(self, None, on_response)
+
+    def _on_input_row_clicked(self, gesture, n_press, x, y):
+        self.on_input_browse(None)
+
+    def _on_output_row_clicked(self, gesture, n_press, x, y):
+        self.on_output_browse(None)
 
     def on_output_browse(self, widget):
         """Browse for output file."""
