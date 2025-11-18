@@ -559,9 +559,12 @@ class VideoConverterWindow(Adw.ApplicationWindow):
             if "size" in mode:
                 target_size = self.target_size_entry.get_value()
                 video_bitrate = (
-                    int(
-                        (target_size * 8192 / self.video_duration)
-                        - self.audio_scale.get_value()
+                    max(
+                        1,
+                        int(
+                            (target_size * 8192 / self.video_duration)
+                            - self.audio_scale.get_value()
+                        ),
                     )
                     if self.video_duration > 0
                     else 0
