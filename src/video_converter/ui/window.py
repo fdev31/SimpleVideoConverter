@@ -603,7 +603,7 @@ class VideoConverterWindow(Adw.ApplicationWindow):
             preset = (
                 self.quality_combo.get_selected_item().get_string()
                 if self.quality_combo.get_selected_item()
-                else "balanced"
+                else "medium"
             )
             cq_level = (
                 self.cq_combo.get_selected_item().get_string()

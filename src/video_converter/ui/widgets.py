@@ -198,16 +198,18 @@ class HintsLabel(Gtk.Box):
             self.speed_label.remove_css_class(cls)
 
         # --- Quality Estimation ---
-        bpp = calculate_bits_per_pixel(video_bitrate_kbps, width, height, fps)
-        quality_rating = rate_quality_from_bpp(bpp, codec)
 
         if selected_mode == CONSTANT_QUALITY_INDEX:
             quality_text = f"Quality: {cq_level.replace('-', ' ').title()}"
+            tooltip_text = f"Constant Quality mode selected.\n'{cq_level.replace('-', ' ').title()}' preset."
             self.quality_label.set_label(quality_text)
             self.quality_icon.set_from_icon_name("dialog-information-symbolic")
-            tooltip_text = f"Constant Quality mode selected.\n'{cq_level}' preset."
         else:
-            quality_text = f"Quality: {quality_rating} ({BLOCK_SIZE * bpp:.4f} BPB)"
+            cq_level = "medium"  # forces 1.0
+            bpp = calculate_bits_per_pixel(video_bitrate_kbps, width, height, fps)
+            quality_rating = rate_quality_from_bpp(bpp, codec)
+
+            quality_text = f"Quality: {quality_rating} ({BLOCK_SIZE * bpp:.2f} BPB)"
             self.quality_label.set_label(quality_text)
             quality_rating_lower = quality_rating.lower()
 
