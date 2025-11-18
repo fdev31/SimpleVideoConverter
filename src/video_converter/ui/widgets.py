@@ -1,10 +1,18 @@
-import gi
+import math
 
+import gi
 from gi.repository import Adw, Gtk
 
 gi.require_version("Gtk", "4.0")
 
-from ..constants import COMPUTER_SPEED_FACTOR, POPULAR_AUDIO_BITRATES
+from ..constants import (
+    BLOCK_SIZE,
+    CODEC_BPP_RATINGS,
+    COMPUTER_SPEED_FACTOR,
+    CONSTANT_QUALITY_INDEX,
+    DEBUG,
+    POPULAR_AUDIO_BITRATES,
+)
 from ..utils import (
     calculate_bits_per_pixel,
     estimate_encoding_speed,
@@ -12,7 +20,6 @@ from ..utils import (
     get_bpp_profile_key,
     rate_quality_from_bpp,
 )
-from ..constants import CODEC_BPP_RATINGS, CONSTANT_QUALITY_INDEX, DEBUG, BLOCK_SIZE
 
 
 class TransformRow(Gtk.Box):
@@ -21,6 +28,26 @@ class TransformRow(Gtk.Box):
     def __init__(self):
         super().__init__(orientation=Gtk.Orientation.HORIZONTAL, spacing=12)
         self.set_halign(Gtk.Align.END)
+
+        preview_box = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=6)
+        preview_box.set_valign(Gtk.Align.CENTER)
+
+        preview_label = Gtk.Label(label="Preview", xalign=0.5)
+        preview_label.add_css_class("caption")
+        preview_box.append(preview_label)
+
+        self.preview = Gtk.DrawingArea()
+        self.preview.set_content_width(96)
+        self.preview.set_content_height(96)
+        self.preview.set_hexpand(False)
+        self.preview.set_vexpand(False)
+        self.preview.set_draw_func(self._on_preview_draw)
+
+        preview_frame = Gtk.Frame()
+        preview_frame.set_child(self.preview)
+        preview_frame.set_hexpand(False)
+        preview_frame.set_vexpand(False)
+        preview_box.append(preview_frame)
 
         # Rotation controls
         rotation_box = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL, spacing=0)
@@ -64,9 +91,38 @@ class TransformRow(Gtk.Box):
         flip_box.append(self.flip_horizontal_button)
         flip_box.append(self.flip_vertical_button)
 
-        # Add to main container
-        self.append(rotation_box)
-        self.append(flip_box)
+        controls_box = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=12)
+        controls_box.set_valign(Gtk.Align.CENTER)
+        controls_box.append(rotation_box)
+        controls_box.append(flip_box)
+
+        self.append(preview_box)
+        self.append(controls_box)
+
+        for button in (
+            self.rotation_none_button,
+            self.rotation_left_button,
+            self.rotation_right_button,
+            self.rotation_180_button,
+        ):
+            button.connect("toggled", self._on_rotation_button_toggled)
+
+        self.flip_horizontal_button.connect("toggled", self._on_flip_button_toggled)
+        self.flip_vertical_button.connect("toggled", self._on_flip_button_toggled)
+
+        self._update_preview()
+
+    def _on_rotation_button_toggled(self, button: Gtk.ToggleButton) -> None:
+        if not button.get_active():
+            return
+        self._update_preview()
+
+    def _on_flip_button_toggled(self, button: Gtk.ToggleButton) -> None:
+        self._update_preview()
+
+    def _update_preview(self) -> None:
+        if self.preview is not None:
+            self.preview.queue_draw()
 
     def get_rotation(self) -> int:
         """Get the selected rotation angle.
@@ -118,6 +174,69 @@ class TransformRow(Gtk.Box):
         self.rotation_none_button.set_active(True)
         self.flip_horizontal_button.set_active(False)
         self.flip_vertical_button.set_active(False)
+
+    def _on_preview_draw(self, area, ctx, width, height) -> None:
+        ctx.save()
+
+        ctx.set_source_rgba(0.95, 0.95, 0.97, 1.0)
+        ctx.rectangle(0, 0, width, height)
+        ctx.fill()
+
+        ctx.set_source_rgba(0.75, 0.75, 0.8, 1.0)
+        ctx.set_line_width(1.0)
+        ctx.rectangle(0.5, 0.5, width - 1.0, height - 1.0)
+        ctx.stroke()
+
+        ctx.translate(width / 2, height / 2)
+
+        rotation = self.get_rotation()
+        ctx.rotate(math.radians(rotation))
+
+        scale_x = -1 if self.get_flip_horizontal() else 1
+        scale_y = -1 if self.get_flip_vertical() else 1
+        ctx.scale(scale_x, scale_y)
+
+        video_width = min(width, height) * 0.72
+        video_height = video_width * 9 / 16
+        ctx.set_source_rgba(1.0, 1.0, 1.0, 1.0)
+        ctx.rectangle(-video_width / 2, -video_height / 2, video_width, video_height)
+        ctx.fill_preserve()
+        ctx.set_source_rgba(0.6, 0.6, 0.65, 1.0)
+        ctx.set_line_width(1.0)
+        ctx.stroke()
+
+        arrow_shaft_half_width = video_width * 0.08
+        arrow_head_height = video_height * 0.26
+        arrow_top = -video_height / 2 + video_height * 0.12
+        arrow_bottom = video_height / 2 - video_height * 0.16
+
+        ctx.set_source_rgba(0.27, 0.58, 0.88, 1.0)
+        ctx.move_to(0, arrow_top)
+        ctx.line_to(arrow_shaft_half_width, arrow_top + arrow_head_height)
+        ctx.line_to(arrow_shaft_half_width * 0.45, arrow_top + arrow_head_height)
+        ctx.line_to(arrow_shaft_half_width * 0.45, arrow_bottom)
+        ctx.line_to(-arrow_shaft_half_width * 0.45, arrow_bottom)
+        ctx.line_to(-arrow_shaft_half_width * 0.45, arrow_top + arrow_head_height)
+        ctx.line_to(-arrow_shaft_half_width, arrow_top + arrow_head_height)
+        ctx.close_path()
+        ctx.fill()
+
+        accent_radius = video_width * 0.07
+        accent_cx = video_width * 0.24
+        accent_cy = -video_height * 0.2
+        ctx.set_source_rgba(0.95, 0.78, 0.22, 1.0)
+        ctx.arc(accent_cx, accent_cy, accent_radius, 0, 2 * math.pi)
+        ctx.fill()
+
+        bar_width = video_width * 0.18
+        bar_height = video_height * 0.12
+        bar_x = -video_width / 2 + video_width * 0.1
+        bar_y = video_height / 2 - video_height * 0.18
+        ctx.set_source_rgba(0.34, 0.8, 0.62, 1.0)
+        ctx.rectangle(bar_x, bar_y - bar_height, bar_width, bar_height)
+        ctx.fill()
+
+        ctx.restore()
 
 
 class HintsLabel(Gtk.Box):
