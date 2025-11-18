@@ -176,22 +176,21 @@ CODEC_BPP_RATINGS = {
     },
 }
 
-PRESET_SPEED = {
-    "ultrafast": (5.0, "Ultrafast"),
+PRESET_TIME_F = {
+    "ultrafast": (0.4, "Ultrafast"),
     "medium": (1.0, "Medium"),
-    "slow": (0.4, "Slow"),
-    "veryslow": (0.2, "Very Slow"),
+    "slow": (1.5, "Slow"),
+    "veryslow": (2.2, "Very Slow"),
 }
 
-CQ_LEVEL_SPEED_FACTOR = {
-    "lowest": 1.2,
-    "low": 1.1,
+CQ_LEVEL_TIME_F = {
+    "lowest": 0.7,
+    "low": 0.8,
     "medium": 1.0,
-    "high": 0.9,
-    "very-high": 0.8,
-    "lossless": 0.7,
+    "high": 1.3,
+    "very-high": 1.5,
+    "lossless": 2.0,
 }
-
 
 # Codec-specific properties
 CQ_LEVELS_H264 = {
@@ -449,7 +448,7 @@ CODECS = {
         "description": "NVIDIA NVENC AV1 encoder. Fast, hardware-accelerated AV1 encoding.",
         "family": "av1",
         "cq_param": "-cq",
-        "speed_factor": 1.66,
+        "speed_factor": 0.18,
         "cq_levels": CQ_LEVELS_H265_HW,  # Note: Using H265 levels as an approximation
         "presets": NVENC_HEVC_AV1_PRESETS,
     },
@@ -546,7 +545,7 @@ CODECS = {
 }
 
 # Miscellaneous
-COMPUTER_SPEED_FACTOR = 1.0
+COMPUTER_SPEED_FACTOR = 5.0
 CSS = b"""
 stack.drop-zone {
     border: 2px dashed #3584e4; /* Adwaita accent color */

@@ -6,9 +6,9 @@ from .constants import (
     CODEC_BPP_RATINGS,
     CODECS,
     CONTAINERS,
-    CQ_LEVEL_SPEED_FACTOR,
     HW_ACCEL,
-    PRESET_SPEED,
+    PRESET_TIME_F,
+    CQ_LEVEL_TIME_F,
 )
 
 
@@ -59,26 +59,13 @@ def estimate_encoding_speed(
 
     # Get codec time factor (higher = slower encoding)
     props = get_codec_properties(codec)
-    time_factor = props.get("time_factor", 1.0)
     codec_speed = props.get("speed_factor", 1.0)
 
     # Preset time multipliers (higher preset = slower for better quality)
-    preset_multipliers = {
-        "ultrafast": 0.4,  # 40% of base time
-        "medium": 1.0,  # 100% - reference speed
-        "slow": 1.5,  # 150% slower
-        "veryslow": 2.2,  # 220% slower
-    }
-    preset_factor = preset_multipliers.get(preset, 1.0)
+    preset_factor = PRESET_TIME_F.get(preset)[0]
 
     # Quality level time multipliers (higher quality = slower encoding)
-    speed_multipliers = {
-        "low": 0.8,  # 20% faster
-        "medium": 1.0,  # Reference
-        "high": 1.3,  # 30% slower
-        "lossless": 2.0,  # 100% slower
-    }
-    speed_factor = speed_multipliers.get(cq_level, 1.0) * codec_speed
+    quality_speed_factor = CQ_LEVEL_TIME_F.get(cq_level)
 
     # Resolution complexity (relative to 1080p baseline)
     # Superlinear because higher resolutions scale encoding time non-linearly
@@ -87,7 +74,6 @@ def estimate_encoding_speed(
     resolution_factor = (current_pixels / reference_pixels) ** 1.3
 
     # Hardware acceleration boost
-    # Note: Already factored into codec's time_factor for hardware codecs
     hw_boost_map = {
         "cpu": 1.0,
         "nvenc": 1.0,
@@ -101,7 +87,11 @@ def estimate_encoding_speed(
     # Calculate total time factor (higher = slower encoding)
     # This represents: seconds of encoding time per 1 second of video
     total_time_factor = (
-        time_factor * preset_factor * speed_factor * resolution_factor / hw_boost
+        codec_speed
+        * preset_factor
+        * quality_speed_factor
+        * resolution_factor
+        / hw_boost
     )
 
     # Convert to encoding speed rating (higher = faster, 1.0 = realtime)
