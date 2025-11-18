@@ -100,7 +100,7 @@ class VideoConverterWindow(Adw.ApplicationWindow):
         settings_box.set_margin_end(12)
 
         # # Files section
-        files_group = Adw.PreferencesGroup(title="General")
+        files_group = Adw.PreferencesGroup()
         settings_box.append(files_group)
 
         files_row = Adw.PreferencesRow()
@@ -135,6 +135,8 @@ class VideoConverterWindow(Adw.ApplicationWindow):
         input_click_controller.connect("released", self._on_input_row_clicked)
         self.input_row.add_controller(input_click_controller)
         input_box.append(self.input_row)
+
+        box.append(Gtk.Separator(orientation=Gtk.Orientation.VERTICAL))
 
         # Output
         output_box = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=6)
