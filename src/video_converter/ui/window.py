@@ -115,7 +115,7 @@ class VideoConverterWindow(Adw.ApplicationWindow):
         box.append(input_box)
 
         input_label = Gtk.Label(
-            label="<b>Video to convert</b>", use_markup=True, xalign=0
+            label="<b>Video to convert</b>", use_markup=True, xalign=0.5
         )
         input_box.append(input_label)
 
@@ -137,9 +137,13 @@ class VideoConverterWindow(Adw.ApplicationWindow):
 
         # Output
         output_box = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=6)
+        output_box.set_hexpand(True)
+        output_box.set_vexpand(True)
         box.append(output_box)
 
-        output_label = Gtk.Label(label="<b>Output File</b>", use_markup=True, xalign=0)
+        output_label = Gtk.Label(
+            label="<b>Output File</b>", use_markup=True, xalign=0.5
+        )
         output_box.append(output_label)
 
         self.output_row = Adw.ActionRow(subtitle="No file selected")
@@ -305,7 +309,7 @@ class VideoConverterWindow(Adw.ApplicationWindow):
         advanced_expander.set_expanded(False)
 
         # Rotation and Flip
-        transform_row = Adw.ActionRow(title="Rotation and Flip")
+        transform_row = Adw.ActionRow(title="Rotate &amp; flip")
         self.transform_row = TransformRow()
         transform_row.add_suffix(self.transform_row)
         transform_row.set_activatable_widget(self.transform_row)
