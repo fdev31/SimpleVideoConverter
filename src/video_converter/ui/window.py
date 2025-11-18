@@ -322,7 +322,7 @@ class VideoConverterWindow(Adw.ApplicationWindow):
         advanced_expander.add_row(passes_expander)
 
         # Track selection
-        self.tracks_group = Adw.PreferencesGroup(title="Audio tracks &amp; Subtitles")
+        self.tracks_group = Adw.PreferencesGroup(title="Sound &amp; Subtitles tracks")
         self.track_widgets = []
         self.no_tracks_row = Adw.ActionRow(
             title="Load a video to see available tracks."

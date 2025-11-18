@@ -320,7 +320,9 @@ class ScalingFactorScale(Gtk.Box):
         self.updating = False
 
         self.scale_group = Adw.PreferencesGroup()
-        self.scale_row = Adw.ExpanderRow(title="Scale", icon_name="transform-scale-symbolic")
+        self.scale_row = Adw.ExpanderRow(
+            title="Scale &amp; rotation", icon_name="transform-scale-symbolic"
+        )
         self.scale_group.add(self.scale_row)
         self.append(self.scale_group)
 
