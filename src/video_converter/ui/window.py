@@ -305,8 +305,11 @@ class VideoConverterWindow(Adw.ApplicationWindow):
         advanced_expander.set_expanded(False)
 
         # Rotation and Flip
+        transform_row = Adw.ActionRow(title="Rotation and Flip")
         self.transform_row = TransformRow()
-        advanced_expander.add_row(self.transform_row)
+        transform_row.add_suffix(self.transform_row)
+        transform_row.set_activatable_widget(self.transform_row)
+        self.scale_factor_scale.scale_row.add_row(transform_row)
 
         passes_expander = Adw.SpinRow(title="Number of Passes")
         passes_expander.set_adjustment(Gtk.Adjustment.new(2, 2, 3, 1, 1, 0))
@@ -319,16 +322,13 @@ class VideoConverterWindow(Adw.ApplicationWindow):
         advanced_expander.add_row(passes_expander)
 
         # Track selection
-        self.tracks_expander = Adw.ExpanderRow(title="Audio tracks &amp; Subtitles")
-        self.tracks_expander.set_tooltip_text(
-            "Select which audio and subtitle tracks to include in the output."
-        )
+        self.tracks_group = Adw.PreferencesGroup(title="Audio tracks &amp; Subtitles")
         self.track_widgets = []
         self.no_tracks_row = Adw.ActionRow(
             title="Load a video to see available tracks."
         )
-        self.tracks_expander.add_row(self.no_tracks_row)
-        advanced_expander.add_row(self.tracks_expander)
+        self.tracks_group.add(self.no_tracks_row)
+        advanced_expander.add_row(self.tracks_group)
 
         audio_codec_model = Gtk.StringList.new(list(AUDIO_CODECS.keys()))
         self.audio_codec_combo = Adw.ComboRow(
@@ -423,10 +423,10 @@ class VideoConverterWindow(Adw.ApplicationWindow):
 
             # Clear existing track widgets
             if hasattr(self, "no_tracks_row") and self.no_tracks_row:
-                self.tracks_expander.remove(self.no_tracks_row)
+                self.tracks_group.remove(self.no_tracks_row)
                 self.no_tracks_row = None
             for track_info in self.track_widgets:
-                self.tracks_expander.remove(track_info["widget"])
+                self.tracks_group.remove(track_info["widget"])
             self.track_widgets = []
 
             # Get video properties
@@ -447,7 +447,7 @@ class VideoConverterWindow(Adw.ApplicationWindow):
                     self.no_tracks_row = Adw.ActionRow(
                         title="No audio or subtitle tracks found."
                     )
-                    self.tracks_expander.add_row(self.no_tracks_row)
+                    self.tracks_group.add(self.no_tracks_row)
                 else:
                     for stream in streams:
                         stream_index = stream.get("index", "N/A")
@@ -468,7 +468,7 @@ class VideoConverterWindow(Adw.ApplicationWindow):
                             "notify::selected-item", self._on_settings_changed
                         )
 
-                        self.tracks_expander.add_row(combo)
+                        self.tracks_group.add(combo)
                         self.track_widgets.append(
                             {
                                 "widget": combo,

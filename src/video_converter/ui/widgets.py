@@ -15,18 +15,12 @@ from ..utils import (
 from ..constants import CODEC_BPP_RATINGS, CONSTANT_QUALITY_INDEX, DEBUG, BLOCK_SIZE
 
 
-class TransformRow(Adw.ActionRow):
-    """Custom ActionRow widget for video rotation and flip selection."""
+class TransformRow(Gtk.Box):
+    """Custom widget for video rotation and flip selection."""
 
     def __init__(self):
-        super().__init__()
-
-        self.set_title("Rotation and Flip")
-        self.set_tooltip_text("Rotate or flip the video.")
-
-        # Container for transform controls
-        transform_box = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL, spacing=12)
-        transform_box.set_halign(Gtk.Align.END)
+        super().__init__(orientation=Gtk.Orientation.HORIZONTAL, spacing=12)
+        self.set_halign(Gtk.Align.END)
 
         # Rotation controls
         rotation_box = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL, spacing=0)
@@ -71,11 +65,8 @@ class TransformRow(Adw.ActionRow):
         flip_box.append(self.flip_vertical_button)
 
         # Add to main container
-        transform_box.append(rotation_box)
-        transform_box.append(flip_box)
-
-        self.add_suffix(transform_box)
-        self.set_activatable_widget(transform_box)
+        self.append(rotation_box)
+        self.append(flip_box)
 
     def get_rotation(self) -> int:
         """Get the selected rotation angle.
@@ -328,10 +319,10 @@ class ScalingFactorScale(Gtk.Box):
         self.original_height = 1080
         self.updating = False
 
-        scale_group = Adw.PreferencesGroup()
-        scale_row = Adw.ExpanderRow(title="Scale", icon_name="transform-scale-symbolic")
-        scale_group.add(scale_row)
-        self.append(scale_group)
+        self.scale_group = Adw.PreferencesGroup()
+        self.scale_row = Adw.ExpanderRow(title="Scale", icon_name="transform-scale-symbolic")
+        self.scale_group.add(self.scale_row)
+        self.append(self.scale_group)
 
         self.adjustment = Gtk.Adjustment(
             lower=0.0, upper=1.0, step_increment=0.01, page_increment=0.1, value=1.0
@@ -351,7 +342,7 @@ class ScalingFactorScale(Gtk.Box):
         for scale in common_scales:
             self.scale.add_mark(scale, Gtk.PositionType.BOTTOM, f"{int(scale * 100)}%")
 
-        scale_row.add_row(self.scale)
+        self.scale_row.add_row(self.scale)
 
         button_box = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL, spacing=12)
         button_box.set_homogeneous(True)
@@ -370,7 +361,7 @@ class ScalingFactorScale(Gtk.Box):
             btn.connect("clicked", lambda w, v=value: self.adjustment.set_value(v))
             button_box.append(btn)
 
-        scale_row.add_row(button_box)
+        self.scale_row.add_row(button_box)
 
         dimensions_box = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL, spacing=12)
         dimensions_box.set_homogeneous(True)
@@ -399,7 +390,7 @@ class ScalingFactorScale(Gtk.Box):
         height_box.append(self.height_entry)
         dimensions_box.append(height_box)
 
-        scale_row.add_row(dimensions_box)
+        self.scale_row.add_row(dimensions_box)
 
     def set_original_dimensions(self, width, height):
         """Set the original video dimensions."""
