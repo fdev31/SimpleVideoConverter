@@ -23,15 +23,101 @@ from ..utils import (
 
 
 class TransformRow(Gtk.Box):
-    """Custom widget for video rotation and flip selection."""
+    """Custom widget for video transform controls (scale, rotation, flip)."""
 
     def __init__(self):
-        super().__init__(orientation=Gtk.Orientation.HORIZONTAL, spacing=12)
-        self.set_halign(Gtk.Align.END)
+        super().__init__(orientation=Gtk.Orientation.HORIZONTAL, spacing=24)
+        self.set_halign(Gtk.Align.FILL)
+        self.set_margin_top(12)
+        self.set_margin_bottom(12)
+        self.set_margin_start(12)
+        self.set_margin_end(12)
+
+        self.original_width = 1920
+        self.original_height = 1080
+        self.updating = False
+
+        # --- Left Column: Scaling and Dimensions ---
+        left_box = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=12)
+        left_box.set_hexpand(True)
+        self.append(left_box)
+
+        scale_label = Gtk.Label(xalign=0)
+        scale_label.set_markup("<b>Scale</b>")
+        left_box.append(scale_label)
+
+        self.adjustment = Gtk.Adjustment(
+            lower=0.0, upper=1.0, step_increment=0.01, page_increment=0.1, value=1.0
+        )
+        self.scale = Gtk.Scale(
+            adjustment=self.adjustment, orientation=Gtk.Orientation.HORIZONTAL, digits=2
+        )
+        self.scale.set_tooltip_text(
+            "Adjust the video scaling factor. 1.0 is original size."
+        )
+        self.scale.set_draw_value(True)
+        self.scale.set_value_pos(Gtk.PositionType.RIGHT)
+        self.scale.set_hexpand(True)
+        self.scale.connect("value-changed", self._on_scale_changed)
+
+        common_scales = [0.25, 0.5, 0.75, 1.0]
+        for scale in common_scales:
+            self.scale.add_mark(scale, Gtk.PositionType.BOTTOM, f"{int(scale * 100)}%")
+        left_box.append(self.scale)
+
+        scale_button_box = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL, spacing=12)
+        scale_button_box.set_homogeneous(True)
+        presets = [
+            ("10%", 0.1),
+            ("25%", 0.25),
+            ("33%", 0.33),
+            ("50%", 0.5),
+            ("66%", 0.66),
+            ("75%", 0.75),
+            ("100%", 1.0),
+        ]
+        for label, value in presets:
+            btn = Gtk.Button(label=label)
+            btn.connect("clicked", lambda w, v=value: self.adjustment.set_value(v))
+            scale_button_box.append(btn)
+        left_box.append(scale_button_box)
+
+        dimensions_box = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL, spacing=12)
+        dimensions_box.set_homogeneous(True)
+        left_box.append(dimensions_box)
+
+        width_box = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=3)
+        width_label = Gtk.Label(label="Width (px)", xalign=0)
+        width_label.add_css_class("caption")
+        self.width_adjustment = Gtk.Adjustment.new(
+            self.original_width, 1, 4096, 1, 10, 0
+        )
+        self.width_entry = Gtk.SpinButton(adjustment=self.width_adjustment, digits=0)
+        self.width_entry.connect("value-changed", self._on_width_changed)
+        width_box.append(width_label)
+        width_box.append(self.width_entry)
+        dimensions_box.append(width_box)
+
+        height_box = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=3)
+        height_label = Gtk.Label(label="Height (px)", xalign=0)
+        height_label.add_css_class("caption")
+        self.height_adjustment = Gtk.Adjustment.new(
+            self.original_height, 1, 4096, 1, 10, 0
+        )
+        self.height_entry = Gtk.SpinButton(adjustment=self.height_adjustment, digits=0)
+        self.height_entry.connect("value-changed", self._on_height_changed)
+        height_box.append(height_label)
+        height_box.append(self.height_entry)
+        dimensions_box.append(height_box)
+
+        self.append(Gtk.Separator(orientation=Gtk.Orientation.VERTICAL))
+
+        # --- Right Column: Preview, Rotation, and Flip ---
+        right_box = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=12)
+        right_box.set_valign(Gtk.Align.CENTER)
+        self.append(right_box)
 
         preview_box = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=6)
-        preview_box.set_valign(Gtk.Align.CENTER)
-
         preview_label = Gtk.Label(label="Preview", xalign=0.5)
         preview_label.add_css_class("caption")
         preview_box.append(preview_label)
@@ -39,66 +125,48 @@ class TransformRow(Gtk.Box):
         self.preview = Gtk.DrawingArea()
         self.preview.set_content_width(96)
         self.preview.set_content_height(96)
-        self.preview.set_hexpand(False)
-        self.preview.set_vexpand(False)
         self.preview.set_draw_func(self._on_preview_draw)
-
-        preview_frame = Gtk.Frame()
-        preview_frame.set_child(self.preview)
-        preview_frame.set_hexpand(False)
-        preview_frame.set_vexpand(False)
+        preview_frame = Gtk.Frame(child=self.preview)
         preview_box.append(preview_frame)
+        right_box.append(preview_box)
 
-        # Rotation controls
         rotation_box = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL, spacing=0)
         rotation_box.add_css_class("linked")
-
-        self.rotation_none_button = Gtk.ToggleButton(label="0°")
-        self.rotation_none_button.set_active(True)
+        self.rotation_none_button = Gtk.ToggleButton(label="0°", active=True)
         self.rotation_none_button.set_tooltip_text("No rotation")
-
-        self.rotation_left_button = Gtk.ToggleButton()
-        self.rotation_left_button.set_icon_name("object-rotate-left-symbolic")
-        self.rotation_left_button.set_group(self.rotation_none_button)
+        self.rotation_left_button = Gtk.ToggleButton(
+            icon_name="object-rotate-left-symbolic", group=self.rotation_none_button
+        )
         self.rotation_left_button.set_tooltip_text("Rotate 90° counter-clockwise")
-
-        self.rotation_right_button = Gtk.ToggleButton()
-        self.rotation_right_button.set_icon_name("object-rotate-right-symbolic")
-        self.rotation_right_button.set_group(self.rotation_none_button)
+        self.rotation_right_button = Gtk.ToggleButton(
+            icon_name="object-rotate-right-symbolic", group=self.rotation_none_button
+        )
         self.rotation_right_button.set_tooltip_text("Rotate 90° clockwise")
-
-        self.rotation_180_button = Gtk.ToggleButton(label="180°")
-        self.rotation_180_button.set_group(self.rotation_none_button)
+        self.rotation_180_button = Gtk.ToggleButton(
+            label="180°", group=self.rotation_none_button
+        )
         self.rotation_180_button.set_tooltip_text("Rotate 180°")
-
         rotation_box.append(self.rotation_none_button)
         rotation_box.append(self.rotation_left_button)
         rotation_box.append(self.rotation_right_button)
         rotation_box.append(self.rotation_180_button)
+        right_box.append(rotation_box)
 
-        # Flip controls
         flip_box = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL, spacing=0)
         flip_box.add_css_class("linked")
-
-        self.flip_horizontal_button = Gtk.ToggleButton()
-        self.flip_horizontal_button.set_icon_name("object-flip-horizontal-symbolic")
+        self.flip_horizontal_button = Gtk.ToggleButton(
+            icon_name="object-flip-horizontal-symbolic"
+        )
         self.flip_horizontal_button.set_tooltip_text("Flip horizontally")
-
-        self.flip_vertical_button = Gtk.ToggleButton()
-        self.flip_vertical_button.set_icon_name("object-flip-vertical-symbolic")
+        self.flip_vertical_button = Gtk.ToggleButton(
+            icon_name="object-flip-vertical-symbolic"
+        )
         self.flip_vertical_button.set_tooltip_text("Flip vertically")
-
         flip_box.append(self.flip_horizontal_button)
         flip_box.append(self.flip_vertical_button)
+        right_box.append(flip_box)
 
-        controls_box = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=12)
-        controls_box.set_valign(Gtk.Align.CENTER)
-        controls_box.append(rotation_box)
-        controls_box.append(flip_box)
-
-        self.append(preview_box)
-        self.append(controls_box)
-
+        # --- Connect Signals ---
         for button in (
             self.rotation_none_button,
             self.rotation_left_button,
@@ -106,7 +174,6 @@ class TransformRow(Gtk.Box):
             self.rotation_180_button,
         ):
             button.connect("toggled", self._on_rotation_button_toggled)
-
         self.flip_horizontal_button.connect("toggled", self._on_flip_button_toggled)
         self.flip_vertical_button.connect("toggled", self._on_flip_button_toggled)
 
@@ -128,13 +195,13 @@ class TransformRow(Gtk.Box):
         """Get the selected rotation angle.
 
         Returns:
-            Rotation angle: 0, -90, 90, or 180 degrees
+            Rotation angle: 0, 270, 90, or 180 degrees.
         """
         if self.rotation_left_button.get_active():
             return 270
-        elif self.rotation_right_button.get_active():
+        if self.rotation_right_button.get_active():
             return 90
-        elif self.rotation_180_button.get_active():
+        if self.rotation_180_button.get_active():
             return 180
         return 0
 
@@ -142,11 +209,11 @@ class TransformRow(Gtk.Box):
         """Set the rotation angle.
 
         Args:
-            angle: Rotation angle (0, -90, 90, or 180)
+            angle: Rotation angle (0, 270, 90, or 180).
         """
         button_map = {
             0: self.rotation_none_button,
-            -90: self.rotation_left_button,
+            270: self.rotation_left_button,
             90: self.rotation_right_button,
             180: self.rotation_180_button,
         }
@@ -171,6 +238,7 @@ class TransformRow(Gtk.Box):
 
     def reset(self) -> None:
         """Reset all transform controls to default state."""
+        self.set_original_dimensions(self.original_width, self.original_height)
         self.rotation_none_button.set_active(True)
         self.flip_horizontal_button.set_active(False)
         self.flip_vertical_button.set_active(False)
@@ -237,6 +305,68 @@ class TransformRow(Gtk.Box):
         ctx.fill()
 
         ctx.restore()
+
+    def set_original_dimensions(self, width, height):
+        """Set the original video dimensions."""
+        self.original_width = width
+        self.original_height = height
+        self.updating = True
+        self.width_entry.set_value(width)
+        self.height_entry.set_value(height)
+        self.adjustment.set_value(1.0)
+        self.updating = False
+
+    def _on_scale_changed(self, widget):
+        """Update width/height when scale factor changes."""
+        if self.updating:
+            return
+        self.updating = True
+        factor = self.adjustment.get_value()
+        new_width = max(1, int(self.original_width * factor))
+        new_height = max(1, int(self.original_height * factor))
+        self.width_entry.set_value(new_width)
+        self.height_entry.set_value(new_height)
+        self.updating = False
+
+    def _on_width_changed(self, widget):
+        """Update height and scaling factor when width changes."""
+        if self.updating:
+            return
+        try:
+            new_width = int(self.width_entry.get_value())
+            if new_width > 0 and self.original_width > 0:
+                self.updating = True
+                factor = new_width / self.original_width
+                new_height = max(1, int(self.original_height * factor))
+                self.height_entry.set_value(new_height)
+                self.adjustment.set_value(max(0.0, min(1.0, factor)))
+                self.updating = False
+        except ValueError:
+            pass
+
+    def _on_height_changed(self, widget):
+        """Update width and scaling factor when height changes."""
+        if self.updating:
+            return
+        try:
+            new_height = int(self.height_entry.get_value())
+            if new_height > 0 and self.original_height > 0:
+                self.updating = True
+                factor = new_height / self.original_height
+                new_width = max(1, int(self.original_width * factor))
+                self.width_entry.set_value(new_width)
+                self.adjustment.set_value(max(0.0, min(1.0, factor)))
+                self.updating = False
+        except ValueError:
+            pass
+
+    def get_scale_factor(self):
+        """Get the current scaling factor value."""
+        return self.adjustment.get_value()
+
+    def set_scale_factor(self, value):
+        """Set the scaling factor value."""
+        self.adjustment.set_value(float(value))
 
 
 class HintsLabel(Gtk.Box):
@@ -475,55 +605,7 @@ class ScalingFactorScale(Gtk.Box):
         for scale in common_scales:
             self.scale.add_mark(scale, Gtk.PositionType.BOTTOM, f"{int(scale * 100)}%")
 
-        self.scale_row.add_row(self.scale)
 
-        button_box = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL, spacing=12)
-        button_box.set_homogeneous(True)
-        presets = [
-            ("10%", 0.1),
-            ("25%", 0.25),
-            ("33%", 0.33),
-            ("50%", 0.5),
-            ("66%", 0.66),
-            ("75%", 0.75),
-            ("100%", 1.0),
-        ]
-
-        for label, value in presets:
-            btn = Gtk.Button(label=label)
-            btn.connect("clicked", lambda w, v=value: self.adjustment.set_value(v))
-            button_box.append(btn)
-
-        self.scale_row.add_row(button_box)
-
-        dimensions_box = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL, spacing=12)
-        dimensions_box.set_homogeneous(True)
-
-        width_box = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=3)
-        width_label = Gtk.Label(label="Width (px)", xalign=0)
-        width_label.add_css_class("caption")
-        self.width_adjustment = Gtk.Adjustment.new(
-            self.original_width, 1, 4096, 1, 10, 0
-        )
-        self.width_entry = Gtk.SpinButton(adjustment=self.width_adjustment, digits=0)
-        self.width_entry.connect("value-changed", self._on_width_changed)
-        width_box.append(width_label)
-        width_box.append(self.width_entry)
-        dimensions_box.append(width_box)
-
-        height_box = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=3)
-        height_label = Gtk.Label(label="Height (px)", xalign=0)
-        height_label.add_css_class("caption")
-        self.height_adjustment = Gtk.Adjustment.new(
-            self.original_height, 1, 4096, 1, 10, 0
-        )
-        self.height_entry = Gtk.SpinButton(adjustment=self.height_adjustment, digits=0)
-        self.height_entry.connect("value-changed", self._on_height_changed)
-        height_box.append(height_label)
-        height_box.append(self.height_entry)
-        dimensions_box.append(height_box)
-
-        self.scale_row.add_row(dimensions_box)
 
     def set_original_dimensions(self, width, height):
         """Set the original video dimensions."""

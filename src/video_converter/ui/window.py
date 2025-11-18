@@ -312,11 +312,11 @@ class VideoConverterWindow(Adw.ApplicationWindow):
         advanced_expander.set_expanded(False)
 
         # Rotation and Flip
-        transform_row = Adw.ActionRow(title="Rotate &amp; flip")
+        # transform_row_container = Adw.ActionRow()
         self.transform_row = TransformRow()
-        transform_row.add_suffix(self.transform_row)
-        transform_row.set_activatable_widget(self.transform_row)
-        self.scale_factor_scale.scale_row.add_row(transform_row)
+        # transform_row_container.add_suffix(self.transform_row)
+        # transform_row_container.set_activatable_widget(self.transform_row)
+        self.scale_factor_scale.scale_row.add_row(self.transform_row)
 
         passes_expander = Adw.SpinRow(title="Number of Passes")
         passes_expander.set_adjustment(Gtk.Adjustment.new(2, 2, 3, 1, 1, 0))
