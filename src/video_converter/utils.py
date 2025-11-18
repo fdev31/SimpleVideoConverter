@@ -34,59 +34,95 @@ def format_duration(duration_sec: int) -> str:
     else:
         return f"{seconds}s"
 
-
 def estimate_encoding_speed(
     codec, preset, width, height, fps, cq_level="medium", hwaccel="cpu"
 ):
-    """Estimate encoding speed with resolution and hardware acceleration.
-    Returns: (speed_factor, time_estimate_seconds, rating)
     """
-    # Base speed factors
-    props = get_codec_properties(codec)
-    codec_speed = props.get("speed_factor", 1.0)
-    preset_speed_multiplier, _ = PRESET_SPEED.get(preset, (1.0, "Unknown"))
-    cq_speed_multiplier = CQ_LEVEL_SPEED_FACTOR.get(cq_level, 1.0)
+    Estimate encoding speed with resolution and hardware acceleration.
 
-    # Resolution complexity (relative to 1080p)
+    Args:
+        codec: Codec name (e.g., "h264", "h265", "av1_nvenc")
+        preset: Preset level ("ultrafast", "medium", "slow", "veryslow")
+        width: Video width in pixels
+        height: Video height in pixels
+        fps: Frames per second (for reference only)
+        cq_level: Quality level ("low", "medium", "high", "lossless")
+        hwaccel: Hardware type ("cpu", "nvenc", "qsv", "vaapi", "videotoolbox", "amf")
+
+    Returns:
+        (encoding_speed_rating, seconds_per_video_second, quality_rating)
+
+        - encoding_speed_rating: float where 1.0 = realtime, 2.0 = 2x faster, 0.5 = 2x slower
+        - seconds_per_video_second: float = time to encode 1 second of video
+        - quality_rating: str (descriptive rating)
+    """
+
+    # Get codec time factor (higher = slower encoding)
+    props = get_codec_properties(codec)
+    time_factor = props.get("time_factor", 1.0)
+    codec_speed = props.get("speed_factor", 1.0)
+
+    # Preset time multipliers (higher preset = slower for better quality)
+    preset_multipliers = {
+        "ultrafast": 0.4,  # 40% of base time
+        "medium": 1.0,  # 100% - reference speed
+        "slow": 1.5,  # 150% slower
+        "veryslow": 2.2,  # 220% slower
+    }
+    preset_factor = preset_multipliers.get(preset, 1.0)
+
+    # Quality level time multipliers (higher quality = slower encoding)
+    speed_multipliers = {
+        "low": 0.8,  # 20% faster
+        "medium": 1.0,  # Reference
+        "high": 1.3,  # 30% slower
+        "lossless": 2.0,  # 100% slower
+    }
+    speed_factor = speed_multipliers.get(cq_level, 1.0) * codec_speed
+
+    # Resolution complexity (relative to 1080p baseline)
+    # Superlinear because higher resolutions scale encoding time non-linearly
     reference_pixels = 1920 * 1080
     current_pixels = width * height
-    resolution_factor = (
-        current_pixels / reference_pixels
-    ) ** 1.3  # Slightly superlinear
+    resolution_factor = (current_pixels / reference_pixels) ** 1.3
 
     # Hardware acceleration boost
-    hw_boost = {
+    # Note: Already factored into codec's time_factor for hardware codecs
+    hw_boost_map = {
         "cpu": 1.0,
-        "nvenc": 15.0,  # Very fast
-        "qsv": 10.0,
-        "vaapi": 8.0,
-        "videotoolbox": 12.0,
-        "amf": 10.0,
-    }.get(hwaccel, 1.0)
+        "nvenc": 1.0,
+        "qsv": 1.0,
+        "vaapi": 1.0,
+        "videotoolbox": 1.0,
+        "amf": 1.0,
+    }
+    hw_boost = hw_boost_map.get(hwaccel, 1.0)
 
-    # Combined speed (higher = faster)
-    base_speed = codec_speed * preset_speed_multiplier * cq_speed_multiplier * hw_boost
-    adjusted_speed = base_speed / resolution_factor
+    # Calculate total time factor (higher = slower encoding)
+    # This represents: seconds of encoding time per 1 second of video
+    total_time_factor = (
+        time_factor * preset_factor * speed_factor * resolution_factor / hw_boost
+    )
 
-    # Estimate time per second of video
-    # Reference: x264 medium at 1080p \u2248 1x realtime on modern CPU
-    seconds_per_video_second = 1.0 / adjusted_speed
+    # Convert to encoding speed rating (higher = faster, 1.0 = realtime)
+    encoding_speed_rating = 1.0 / total_time_factor
+    seconds_per_video_second = total_time_factor
 
-    # Determine rating
-    if adjusted_speed >= 5.0:
-        rating = "Very Fast (Real-time+)"
-    elif adjusted_speed >= 1.0:
-        rating = "Fast (Near Real-time)"
-    elif adjusted_speed >= 0.5:
-        rating = "Moderate (2x duration)"
-    elif adjusted_speed >= 0.2:
-        rating = "Slow (5x duration)"
-    elif adjusted_speed >= 0.05:
-        rating = "Very Slow (20x duration)"
+    # Determine quality rating based on speed
+    if encoding_speed_rating >= 5.0:
+        rating_description = "Very Fast (Real-time+)"
+    elif encoding_speed_rating >= 1.0:
+        rating_description = "Fast (Near Real-time)"
+    elif encoding_speed_rating >= 0.5:
+        rating_description = "Moderate (2x slower)"
+    elif encoding_speed_rating >= 0.2:
+        rating_description = "Slow (5x slower)"
+    elif encoding_speed_rating >= 0.05:
+        rating_description = "Very Slow (20x slower)"
     else:
-        rating = "Extremely Slow (40x+ duration)"
+        rating_description = "Extremely Slow (40x+ slower)"
 
-    return adjusted_speed, seconds_per_video_second, rating
+    return encoding_speed_rating, seconds_per_video_second, rating_description
 
 
 def get_codec_properties(codec):

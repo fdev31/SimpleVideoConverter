@@ -309,7 +309,7 @@ CODECS = {
         "description": "H.265/HEVC: High Efficiency Video Coding. Successor to H.264, offers better compression.",
         "family": "h265",
         "cq_param": "-crf",
-        "speed_factor": 0.15,
+        "speed_factor": 6.7,
         "cq_levels": CQ_LEVELS_H265,
         "presets": {
             "ultrafast": ["-preset", "ultrafast", "-x265-params", "log-level=error"],
@@ -324,7 +324,7 @@ CODECS = {
         "description": "AV1: Royalty-free, next-generation video coding format. Excellent compression, but slow encoding.",
         "family": "av1",
         "cq_param": "-crf",
-        "speed_factor": 0.03,
+        "speed_factor": 33.0,
         "cq_levels": CQ_LEVELS_AV1_VP9,
         "presets": {
             "ultrafast": ["-cpu-used", "8", "-row-mt", "1"],
@@ -339,7 +339,7 @@ CODECS = {
         "description": "VP9: Royalty-free video coding format developed by Google. Good for web streaming.",
         "family": "vp9",
         "cq_param": "-crf",
-        "speed_factor": 0.10,
+        "speed_factor": 10.0,
         "cq_levels": CQ_LEVELS_AV1_VP9,
         "presets": {
             "ultrafast": ["-deadline", "realtime", "-cpu-used", "8", "-row-mt", "1"],
@@ -354,7 +354,7 @@ CODECS = {
         "description": "MPEG-4 Part 2: Older video codec, less efficient than H.264/H.265.",
         "family": "mpeg4",
         "cq_param": "-qscale:v",
-        "speed_factor": 1.5,
+        "speed_factor": 0.67,
         "cq_levels": CQ_LEVELS_MPEG4,
         "presets": {
             "ultrafast": ["-q:v", "8"],
@@ -369,7 +369,7 @@ CODECS = {
         "description": "Intel/AMD VAAPI hardware encoder (Linux).",
         "family": "h264",
         "cq_param": "-qp",
-        "speed_factor": 0.03,
+        "speed_factor": 0.2,
         "cq_levels": CQ_LEVELS_H264_HW,
         "presets": {
             "ultrafast": ["-compression_level", "2"],
@@ -384,7 +384,7 @@ CODECS = {
         "description": "Intel/AMD VAAPI HEVC encoder (Linux).",
         "family": "hevc",
         "cq_param": "-qp",
-        "speed_factor": 0.02,
+        "speed_factor": 0.214,
         "cq_levels": CQ_LEVELS_H265_HW,
         "presets": {
             "ultrafast": ["-compression_level", "2"],
@@ -399,7 +399,7 @@ CODECS = {
         "description": "VA-API VP9 encoder. Hardware-accelerated VP9 encoding for VA-API compatible GPUs.",
         "family": "vp9",
         "cq_param": "-qp",
-        "speed_factor": 6.0,
+        "speed_factor": 0.5,
         "cq_levels": CQ_LEVELS_AV1_VP9_HW,
         "presets": None,
     },
@@ -409,7 +409,7 @@ CODECS = {
         "description": "VA-API AV1 encoder. Hardware-accelerated AV1 encoding for VA-API compatible GPUs.",
         "family": "av1",
         "cq_param": "-qp",
-        "speed_factor": 4.0,
+        "speed_factor": 0.353,
         "cq_levels": CQ_LEVELS_AV1_VP9_HW,
         "presets": None,
     },
@@ -419,7 +419,7 @@ CODECS = {
         "description": "NVIDIA H.264 hardware encoder. Fast, suitable for gaming/streaming.",
         "family": "h264",
         "cq_param": "-cq",
-        "speed_factor": 0.02,
+        "speed_factor": 0.167,
         "cq_levels": CQ_LEVELS_H264_HW,
         "presets": {
             "ultrafast": ["-preset", "fast"],
@@ -434,7 +434,7 @@ CODECS = {
         "description": "NVIDIA HEVC encoder: Efficient compression, newer GPUs recommended.",
         "family": "hevc",
         "cq_param": "-cq",
-        "speed_factor": 0.012,
+        "speed_factor": 0.143,
         "cq_levels": CQ_LEVELS_H265_HW,
         "presets": {
             "ultrafast": ["-preset", "fast"],
@@ -449,7 +449,7 @@ CODECS = {
         "description": "NVIDIA NVENC AV1 encoder. Fast, hardware-accelerated AV1 encoding.",
         "family": "av1",
         "cq_param": "-cq",
-        "speed_factor": 9.0,
+        "speed_factor": 1.66,
         "cq_levels": CQ_LEVELS_H265_HW,  # Note: Using H265 levels as an approximation
         "presets": NVENC_HEVC_AV1_PRESETS,
     },
@@ -459,7 +459,7 @@ CODECS = {
         "description": "AMD Advanced Media Framework hardware encoder.",
         "family": "h264",
         "cq_param": "-qp",
-        "speed_factor": 0.019,
+        "speed_factor": 0.214,
         "cq_levels": CQ_LEVELS_H264_HW,
         "presets": {
             "ultrafast": ["-quality", "speed"],
@@ -474,7 +474,7 @@ CODECS = {
         "description": "AMD HEVC encoder (AMF). Efficient, modern AMD GPUs.",
         "family": "hevc",
         "cq_param": "-qp",
-        "speed_factor": 0.017,
+        "speed_factor": 0.231,
         "cq_levels": CQ_LEVELS_H265_HW,
         "presets": {
             "ultrafast": ["-quality", "speed"],
@@ -489,7 +489,7 @@ CODECS = {
         "description": "Intel Quick Sync hardware encoder.",
         "family": "h264",
         "cq_param": "-global_quality",
-        "speed_factor": 0.015,
+        "speed_factor": 0.25,
         "cq_levels": CQ_LEVELS_H264_HW,
         "presets": {
             "ultrafast": ["-preset", "fast"],
@@ -504,7 +504,7 @@ CODECS = {
         "description": "Intel Quick Sync HEVC encoder.",
         "family": "hevc",
         "cq_param": "-global_quality",
-        "speed_factor": 0.013,
+        "speed_factor": 0.273,
         "cq_levels": CQ_LEVELS_H265_HW,
         "presets": {
             "ultrafast": ["-preset", "fast"],
@@ -519,7 +519,7 @@ CODECS = {
         "description": "Apple hardware encoder (macOS/iOS).",
         "family": "h264",
         "cq_param": "-quality",
-        "speed_factor": 0.016,
+        "speed_factor": 0.176,
         "cq_levels": {"low": 25, "medium": 50, "high": 75, "lossless": 100},
         "presets": {
             "ultrafast": ["-speed", "fast"],
@@ -534,7 +534,7 @@ CODECS = {
         "description": "Apple hardware HEVC encoder (macOS/iOS).",
         "family": "hevc",
         "cq_param": "-quality",
-        "speed_factor": 0.012,
+        "speed_factor": 0.163,
         "cq_levels": {"low": 25, "medium": 50, "high": 75, "lossless": 100},
         "presets": {
             "ultrafast": ["-speed", "fast"],

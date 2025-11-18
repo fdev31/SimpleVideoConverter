@@ -238,10 +238,12 @@ class HintsLabel(Gtk.Box):
         self.quality_icon.set_tooltip_text(tooltip_text)
 
         # --- Speed Estimation ---
-        espeed, etime, speed_rating = estimate_encoding_speed(
+        _, etime, speed_rating = estimate_encoding_speed(
             codec, quality_preset, width, height, fps, cq_level, hwaccel=hwaccel
         )
-        self.estimated_compression_time = etime * video_duration / COMPUTER_SPEED_FACTOR
+        self.estimated_compression_time = (
+            etime * video_duration
+        ) / COMPUTER_SPEED_FACTOR
         time_str = format_duration(self.estimated_compression_time)
         speed_text = f"Speed: {speed_rating} (Est: {time_str})"
         self.speed_label.set_label(speed_text)
