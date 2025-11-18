@@ -392,10 +392,7 @@ class VideoConverterWindow(Adw.ApplicationWindow):
         output_box.append(scrolled_output)
 
         self.view_stack.add_titled_with_icon(
-            self.scrolled_settings,
-            "settings",
-            "Settings",
-            "preferences-system-symbolic",
+            self.scrolled_settings, "settings", "Main", "video-x-generic-symbolic"
         )
         self.view_stack.add_titled_with_icon(
             output_box, "output", "Output", "utilities-terminal-symbolic"
