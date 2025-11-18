@@ -2,13 +2,13 @@ import subprocess
 from pathlib import Path
 
 from .constants import (
-    CODECS,
-    CODEC_BPP_RATINGS,
-    CONTAINERS,
     AUDIO_CODECS,
+    CODEC_BPP_RATINGS,
+    CODECS,
+    CONTAINERS,
+    CQ_LEVEL_SPEED_FACTOR,
     HW_ACCEL,
     PRESET_SPEED,
-    CQ_LEVEL_SPEED_FACTOR,
 )
 
 
@@ -35,7 +35,9 @@ def format_duration(duration_sec: int) -> str:
         return f"{seconds}s"
 
 
-def estimate_encoding_speed(codec, preset, width, height, fps, cq_level="medium", hwaccel="cpu"):
+def estimate_encoding_speed(
+    codec, preset, width, height, fps, cq_level="medium", hwaccel="cpu"
+):
     """Estimate encoding speed with resolution and hardware acceleration.
     Returns: (speed_factor, time_estimate_seconds, rating)
     """
@@ -111,7 +113,7 @@ def get_audio_codec_name(codec_input):
     """Convert user-friendly audio codec name to ffmpeg codec."""
     if not codec_input:
         return None
-    return AUDIO_CODECS[codec_input]['name']
+    return AUDIO_CODECS[codec_input]["name"]
 
 
 def detect_codec_from_extension(ext):
@@ -193,9 +195,7 @@ def get_video_properties(input_file):
 
         # Filter for just audio and subtitle streams to return
         track_streams = [
-            s
-            for s in streams
-            if s.get("codec_type") in ("audio", "subtitle")
+            s for s in streams if s.get("codec_type") in ("audio", "subtitle")
         ]
 
         return width, height, fps, track_streams
@@ -219,7 +219,9 @@ def get_hw_accels():
             lines = result.stdout.strip().split("\n")
             if len(lines) > 1 and "Hardware acceleration methods" in lines[0]:
                 # The output can contain "----------" which we should filter out
-                accels = [line.strip() for line in lines[1:] if not line.startswith("-")]
+                accels = [
+                    line.strip() for line in lines[1:] if not line.startswith("-")
+                ]
                 return [a for a in accels if a in HW_ACCEL]
         return []
     except Exception:
@@ -302,7 +304,9 @@ def calculate_bitrate(target_size_mb, duration_seconds, audio_bitrate):
         raise ValueError("Video duration must be greater than 0")
     video_bitrate = (target_size_kbits // duration_seconds) - audio_bitrate
     if video_bitrate <= 0:
-        raise ValueError("Calculated bitrate is negative or zero. Target file size too small.")
+        raise ValueError(
+            "Calculated bitrate is negative or zero. Target file size too small."
+        )
     return video_bitrate
 
 
@@ -402,7 +406,9 @@ def build_ffmpeg_command(
     else:
         cmd.extend(["-c:v", ffmpeg_codec, "-b:v", f"{video_bitrate}k"])
         if not is_vbr or pass_num is None or pass_num > 1:
-            cmd.extend(["-maxrate", f"{video_bitrate}k", "-bufsize", f"{video_bitrate * 2}k"])
+            cmd.extend(
+                ["-maxrate", f"{video_bitrate}k", "-bufsize", f"{video_bitrate * 2}k"]
+            )
         cmd.extend(get_codec_options(codec, quality))
         if is_vbr:
             cmd.extend(["-pass", str(pass_num)])

@@ -2,7 +2,7 @@ from enum import StrEnum
 
 DEBUG = False
 
-BLOCK_SIZE = 16*16 # One block = 16x16px
+BLOCK_SIZE = 16 * 16  # One block = 16x16px
 
 # User Interface constants
 POPULAR_AUDIO_BITRATES = [0, 64, 96, 128, 192, 256, 320]
@@ -290,7 +290,14 @@ CODECS = {
         "speed_factor": 1.0,
         "cq_levels": CQ_LEVELS_H264,
         "presets": {
-            "ultrafast": ["-preset", "ultrafast", "-profile:v", "high", "-level", "4.1"],
+            "ultrafast": [
+                "-preset",
+                "ultrafast",
+                "-profile:v",
+                "high",
+                "-level",
+                "4.1",
+            ],
             "medium": ["-preset", "medium", "-profile:v", "high", "-level", "4.1"],
             "slow": ["-preset", "slow", "-profile:v", "high", "-level", "4.1"],
             "veryslow": ["-preset", "veryslow", "-profile:v", "high", "-level", "4.1"],
@@ -443,7 +450,7 @@ CODECS = {
         "family": "av1",
         "cq_param": "-cq",
         "speed_factor": 9.0,
-        "cq_levels": CQ_LEVELS_H265_HW, # Note: Using H265 levels as an approximation
+        "cq_levels": CQ_LEVELS_H265_HW,  # Note: Using H265 levels as an approximation
         "presets": NVENC_HEVC_AV1_PRESETS,
     },
     "h264_amf": {
@@ -513,7 +520,7 @@ CODECS = {
         "family": "h264",
         "cq_param": "-quality",
         "speed_factor": 0.016,
-        "cq_levels": { "low": 25, "medium": 50, "high": 75, "lossless": 100 },
+        "cq_levels": {"low": 25, "medium": 50, "high": 75, "lossless": 100},
         "presets": {
             "ultrafast": ["-speed", "fast"],
             "medium": ["-speed", "medium"],
@@ -528,7 +535,7 @@ CODECS = {
         "family": "hevc",
         "cq_param": "-quality",
         "speed_factor": 0.012,
-        "cq_levels": { "low": 25, "medium": 50, "high": 75, "lossless": 100 },
+        "cq_levels": {"low": 25, "medium": 50, "high": 75, "lossless": 100},
         "presets": {
             "ultrafast": ["-speed", "fast"],
             "medium": ["-speed", "medium"],

@@ -1,10 +1,12 @@
-from gi.repository import Adw, Gdk, GLib, Gtk, GObject, Gio
+from gi.repository import Gio, GObject
+
 
 def get_ItemList(orig, namegetter):
     store = Gio.ListStore.new(ListItem)
     for codec in orig:
         store.append(ListItem(namegetter(codec), codec))
     return store
+
 
 class ListItem(GObject.Object):
     __gtype_name__ = "ListItem"
@@ -21,5 +23,3 @@ class ListItem(GObject.Object):
     @GObject.Property(type=str)
     def value(self):
         return self._value
-
-
