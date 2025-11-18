@@ -59,6 +59,7 @@ class VideoConverterWindow(Adw.ApplicationWindow):
         self.video_height = 1080
         self.video_fps = 24.0
         self.video_duration = 30.0
+        self.video_codec = None
 
         self.input_file = None
         self.output_file = Path("./output.mp4")
@@ -435,7 +436,8 @@ class VideoConverterWindow(Adw.ApplicationWindow):
 
             # Get video properties
             try:
-                width, height, fps, streams = get_video_properties(path)
+                codec, width, height, fps, streams = get_video_properties(path)
+                self.video_codec = codec
                 if width and height and fps:
                     self.video_width = width
                     self.video_height = height
@@ -536,7 +538,6 @@ class VideoConverterWindow(Adw.ApplicationWindow):
     def _on_drop(self, drop_target, value, x, y):
         """Handle the actual drop event."""
         self.view_stack.remove_css_class("drop-zone")
-        print(value)
 
         if isinstance(value, Gdk.FileList):
             files = value.get_files()
@@ -617,12 +618,14 @@ class VideoConverterWindow(Adw.ApplicationWindow):
 
             # Update hints
             scale_factor = self.scale_factor_scale.get_value()
+
             self.hints_label.update_quality_speed(
                 video_bitrate,
                 self.video_width * scale_factor,
                 self.video_height * scale_factor,
                 self.video_fps,
                 codec,
+                self.video_codec,
                 preset,
                 cq_level,
                 self.video_duration,

@@ -173,6 +173,7 @@ class HintsLabel(Gtk.Box):
         height: int,
         fps: float,
         codec: str = "libx264",
+        input_codec: str = "libx264",
         quality_preset: str = "medium",
         cq_level: str = "medium",
         video_duration: int = 0,
@@ -239,7 +240,14 @@ class HintsLabel(Gtk.Box):
 
         # --- Speed Estimation ---
         _, etime, speed_rating = estimate_encoding_speed(
-            codec, quality_preset, width, height, fps, cq_level, hwaccel=hwaccel
+            codec,
+            quality_preset,
+            width,
+            height,
+            fps,
+            cq_level,
+            hwaccel=hwaccel,
+            video_duration=video_duration,
         )
         self.estimated_compression_time = (
             etime * video_duration

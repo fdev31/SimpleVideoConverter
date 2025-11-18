@@ -34,20 +34,31 @@ def format_duration(duration_sec: int) -> str:
     else:
         return f"{seconds}s"
 
+
 def estimate_encoding_speed(
-    codec, preset, width, height, fps, cq_level="medium", hwaccel="cpu"
+    codec,
+    preset,
+    width,
+    height,
+    fps,
+    cq_level="medium",
+    hwaccel="cpu",
+    input_codec=None,
+    video_duration=None,
 ):
     """
     Estimate encoding speed with resolution and hardware acceleration.
 
     Args:
-        codec: Codec name (e.g., "h264", "h265", "av1_nvenc")
+        codec: Output codec name (e.g., "h264", "h265", "av1_nvenc")
         preset: Preset level ("ultrafast", "medium", "slow", "veryslow")
         width: Video width in pixels
         height: Video height in pixels
-        fps: Frames per second (for reference only)
+        fps: Frames per second
         cq_level: Quality level ("low", "medium", "high", "lossless")
         hwaccel: Hardware type ("cpu", "nvenc", "qsv", "vaapi", "videotoolbox", "amf")
+        input_codec: Input video codec (optional, for decoding overhead)
+        video_duration: Video duration in seconds (optional, for I/O overhead)
 
     Returns:
         (encoding_speed_rating, seconds_per_video_second, quality_rating)
@@ -62,55 +73,87 @@ def estimate_encoding_speed(
     codec_speed = props.get("speed_factor", 1.0)
 
     # Preset time multipliers (higher preset = slower for better quality)
-    preset_factor = PRESET_TIME_F.get(preset)[0]
+    preset_factor = PRESET_TIME_F.get(preset, (1.0,))[0]
 
     # Quality level time multipliers (higher quality = slower encoding)
-    quality_speed_factor = CQ_LEVEL_TIME_F.get(cq_level)
+    quality_speed_factor = CQ_LEVEL_TIME_F.get(cq_level, 1.0)
 
-    # Resolution complexity (relative to 1080p baseline)
-    # Superlinear because higher resolutions scale encoding time non-linearly
-    reference_pixels = 1920 * 1080
+    # Resolution complexity with better scaling
+    # More accurate exponential relationship for encoding complexity
+    reference_pixels = 1920 * 1080  # 1080p baseline
     current_pixels = width * height
-    resolution_factor = (current_pixels / reference_pixels) ** 1.3
+    pixel_ratio = current_pixels / reference_pixels
 
-    # Hardware acceleration boost
-    hw_boost_map = {
-        "cpu": 1.0,
-        "nvenc": 1.0,
-        "qsv": 1.0,
-        "vaapi": 1.0,
-        "videotoolbox": 1.0,
-        "amf": 1.0,
-    }
-    hw_boost = hw_boost_map.get(hwaccel, 1.0)
+    # Use different exponents above/below reference to better model reality
+    # Higher resolutions scale worse (more cache misses, memory bandwidth)
+    # Lower resolutions don't scale as well (fixed overhead, minimum complexity)
+    if pixel_ratio >= 1.0:
+        # Above 1080p: superlinear scaling (1.4 exponent)
+        resolution_factor = pixel_ratio**1.4
+    else:
+        # Below 1080p: sublinear scaling (0.8 exponent) - doesn't get as much faster
+        resolution_factor = pixel_ratio**0.8
+
+    # FPS scaling - more frames = proportionally more work
+    # But with slight sublinear scaling due to I-frame amortization
+    fps_ratio = (fps / 30.0) ** 0.95
+
+    # Input codec decoding overhead (per second of video)
+    # This adds time for decoding the source video before encoding
+    decode_overhead_factor = 1.0
+    if input_codec:
+        input_codec_lower = input_codec.lower()
+        decode_overhead_factor = CODEC_BPP_RATINGS.get(input_codec_lower, 1.0)
+
+    # I/O overhead for very long videos (disk reading overhead)
+    # Becomes more significant for multi-hour content
+    io_overhead_factor = 1.0
+    if video_duration:
+        if video_duration > 3600:  # Over 1 hour
+            # Add 5-10% overhead for long files
+            io_overhead_factor = 1.05 + (min(video_duration / 3600, 10) * 0.01)
+        elif video_duration < 60:  # Under 1 minute
+            # Short videos have relatively more startup overhead
+            io_overhead_factor = 1.02
 
     # Calculate total time factor (higher = slower encoding)
     # This represents: seconds of encoding time per 1 second of video
     total_time_factor = (
         codec_speed
+        * fps_ratio
         * preset_factor
         * quality_speed_factor
         * resolution_factor
-        / hw_boost
+        * decode_overhead_factor
+        * io_overhead_factor
     )
+
+    # Add baseline overhead (setup, I/O, etc.) - typically 0.01-0.05s per video second
+    # This makes estimates more accurate for very fast encodes
+    baseline_overhead = 0.02
+    total_time_factor = max(total_time_factor, baseline_overhead)
 
     # Convert to encoding speed rating (higher = faster, 1.0 = realtime)
     encoding_speed_rating = 1.0 / total_time_factor
     seconds_per_video_second = total_time_factor
 
-    # Determine quality rating based on speed
-    if encoding_speed_rating >= 5.0:
-        rating_description = "Very Fast (Real-time+)"
+    # Determine quality rating based on speed with better thresholds
+    if encoding_speed_rating >= 10.0:
+        rating_description = "Extremely Fast (10x+ realtime)"
+    elif encoding_speed_rating >= 5.0:
+        rating_description = "Very Fast (5-10x realtime)"
+    elif encoding_speed_rating >= 2.0:
+        rating_description = "Fast (2-5x realtime)"
     elif encoding_speed_rating >= 1.0:
-        rating_description = "Fast (Near Real-time)"
+        rating_description = "Realtime (1-2x realtime)"
     elif encoding_speed_rating >= 0.5:
-        rating_description = "Moderate (2x slower)"
+        rating_description = "Moderate (0.5-1x realtime)"
     elif encoding_speed_rating >= 0.2:
-        rating_description = "Slow (5x slower)"
+        rating_description = "Slow (0.2-0.5x realtime)"
     elif encoding_speed_rating >= 0.05:
-        rating_description = "Very Slow (20x slower)"
+        rating_description = "Very Slow (0.05-0.2x realtime)"
     else:
-        rating_description = "Extremely Slow (40x+ slower)"
+        rating_description = "Extremely Slow (<0.05x realtime)"
 
     return encoding_speed_rating, seconds_per_video_second, rating_description
 
@@ -207,10 +250,11 @@ def get_video_properties(input_file):
             (s for s in streams if s.get("codec_type") == "video"), None
         )
         if not video_stream:
-            return None, None, None, []
+            return None, None, None, None, []
 
         width = int(video_stream.get("width", 0))
         height = int(video_stream.get("height", 0))
+        codec = video_stream.get("codec_name")
 
         r_frame_rate = video_stream.get("r_frame_rate", "0/1")
         if "/" in r_frame_rate:
@@ -224,11 +268,11 @@ def get_video_properties(input_file):
             s for s in streams if s.get("codec_type") in ("audio", "subtitle")
         ]
 
-        return width, height, fps, track_streams
+        return codec, width, height, fps, track_streams
     except (subprocess.CalledProcessError, json.JSONDecodeError, FileNotFoundError):
-        return None, None, None, []
+        return None, None, None, None, []
     except Exception:
-        return None, None, None, []
+        return None, None, None, None, []
 
 
 def get_hw_accels():
@@ -373,7 +417,7 @@ def build_ffmpeg_command(
 
     is_vaapi = hwaccel and hwaccel.lower() == "vaapi"
     if is_vaapi:
-        vaapi_devices = sorted(list(Path("/dev/dri").glob("renderD*")))
+        vaapi_devices = sorted(list(Path("/dev/dri").glob("render" + "D*")))
         if vaapi_devices:
             cmd.extend(["-vaapi_device", str(vaapi_devices[0])])
         cmd.extend(["-hwaccel", "vaapi"])  # , "-hwaccel_output_format", "vaapi"])

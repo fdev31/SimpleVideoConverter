@@ -123,6 +123,7 @@ CODEC_BPP_RATINGS = {
         "min_bpp": 0.03,
         "recommended_bpp": 0.10,
         "max_bpp": 0.35,
+        "decode_time": 1.0,
         "notes": "Most compatible. Baseline/Main/High profiles.",
     },
     "h265": {
@@ -130,6 +131,7 @@ CODEC_BPP_RATINGS = {
         "min_bpp": 0.015,
         "recommended_bpp": 0.05,
         "max_bpp": 0.18,
+        "decode_time": 1.15,
         "notes": "30-50% better than H.264. Main/Main 10 profiles.",
     },
     "vp9": {
@@ -137,6 +139,7 @@ CODEC_BPP_RATINGS = {
         "min_bpp": 0.015,
         "recommended_bpp": 0.05,
         "max_bpp": 0.20,
+        "decode_time": 1.25,
         "notes": "Royalty-free. ~20% more bitrate than H.265.",
     },
     "av1": {
@@ -144,6 +147,7 @@ CODEC_BPP_RATINGS = {
         "min_bpp": 0.01,
         "recommended_bpp": 0.04,
         "max_bpp": 0.15,
+        "decode_time": 1.35,
         "notes": "30-50% better than VP9/HEVC. Slowest encoding.",
     },
     "mpeg2": {
@@ -151,6 +155,7 @@ CODEC_BPP_RATINGS = {
         "min_bpp": 0.08,
         "recommended_bpp": 0.25,
         "max_bpp": 0.80,
+        "decode_time": 1.05,
         "notes": "Legacy codec. 2-3x bitrate vs H.264 for same quality.",
     },
     "vp8": {
@@ -158,6 +163,7 @@ CODEC_BPP_RATINGS = {
         "min_bpp": 0.02,
         "recommended_bpp": 0.10,
         "max_bpp": 0.50,
+        "decode_time": 1.10,
         "notes": "Royalty-free. Older, less efficient than VP9.",
     },
     "theora": {
@@ -165,6 +171,7 @@ CODEC_BPP_RATINGS = {
         "min_bpp": 0.04,
         "recommended_bpp": 0.12,
         "max_bpp": 0.50,
+        "decode_time": 1.10,
         "notes": "Royalty-free. CBR mode. Limited modern adoption.",
     },
     "dirac": {
@@ -172,6 +179,7 @@ CODEC_BPP_RATINGS = {
         "min_bpp": 0.08,
         "recommended_bpp": 0.30,
         "max_bpp": 1.20,
+        "decode_time": 1.10,
         "notes": "BBC codec. High CPU. Supports lossless.",
     },
 }
@@ -545,7 +553,7 @@ CODECS = {
 }
 
 # Miscellaneous
-COMPUTER_SPEED_FACTOR = 5.0
+COMPUTER_SPEED_FACTOR = 4.0
 CSS = b"""
 stack.drop-zone {
     border: 2px dashed #3584e4; /* Adwaita accent color */
