@@ -114,7 +114,9 @@ class VideoConverterWindow(Adw.ApplicationWindow):
         input_box.set_vexpand(True)
         box.append(input_box)
 
-        input_label = Gtk.Label(label="<b>Video to convert</b>", use_markup=True, xalign=0)
+        input_label = Gtk.Label(
+            label="<b>Video to convert</b>", use_markup=True, xalign=0
+        )
         input_box.append(input_label)
 
         self.input_row = Adw.ActionRow(subtitle="No file selected")
@@ -502,7 +504,7 @@ class VideoConverterWindow(Adw.ApplicationWindow):
                 audio_bitrate = proc_result.stdout.strip()
                 if audio_bitrate and audio_bitrate.isdigit():
                     bitrate_kbps = int(audio_bitrate) // 1000
-                    self.audioscale.set_value(bitrate_kbps)
+                    self.audio_scale.set_value(bitrate_kbps)
             except subprocess.CalledProcessError:
                 # This is not an error, the video may not have an audio track.
                 pass
@@ -777,14 +779,14 @@ class VideoConverterWindow(Adw.ApplicationWindow):
         hwaccel_name = selected_item.get_string().lower()
 
         # Update description
-        description = HW_ACCEL.get(hwaccel_name, HW_ACCEL["cpu"])[ "description"]
+        description = HW_ACCEL.get(hwaccel_name, HW_ACCEL["cpu"])["description"]
         combo.set_subtitle(description)
 
         current_codec = self.codec_combo.get_selected_item().value
         codec_family = CODECS[current_codec]["family"]
 
         # Update codec list
-        codec_list = HW_ACCEL.get(hwaccel_name, HW_ACCEL["cpu"])[ "codecs"]
+        codec_list = HW_ACCEL.get(hwaccel_name, HW_ACCEL["cpu"])["codecs"]
         store = self._get_codec_list(codec_list)
         self.codec_combo.set_model(store)
         for i, codec in enumerate(codec_list):
