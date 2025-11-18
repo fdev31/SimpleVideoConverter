@@ -244,8 +244,9 @@ class TransformRow(Gtk.Box):
         self.flip_vertical_button.set_active(False)
 
     def _on_preview_draw(self, area, ctx, width, height) -> None:
-        ctx.save()
+        from gi.repository import Gdk, GdkPixbuf
 
+        ctx.save()
         ctx.set_source_rgba(0.95, 0.95, 0.97, 1.0)
         ctx.rectangle(0, 0, width, height)
         ctx.fill()
@@ -255,55 +256,37 @@ class TransformRow(Gtk.Box):
         ctx.rectangle(0.5, 0.5, width - 1.0, height - 1.0)
         ctx.stroke()
 
+        image_path = "/tmp/foobar.png"
+        try:
+            pixbuf = GdkPixbuf.Pixbuf.new_from_file(image_path)
+        except Exception:
+            ctx.restore()
+            return
+
+        image_width = pixbuf.get_width()
+        image_height = pixbuf.get_height()
+        if not image_width or not image_height:
+            ctx.restore()
+            return
+
+        scale = min(width / image_width, height / image_height)
+        if scale <= 0:
+            ctx.restore()
+            return
+
+        ctx.save()
         ctx.translate(width / 2, height / 2)
 
         rotation = self.get_rotation()
         ctx.rotate(math.radians(rotation))
 
-        scale_x = -1 if self.get_flip_horizontal() else 1
-        scale_y = -1 if self.get_flip_vertical() else 1
-        ctx.scale(scale_x, scale_y)
+        flip_x = -1 if self.get_flip_horizontal() else 1
+        flip_y = -1 if self.get_flip_vertical() else 1
+        ctx.scale(scale * flip_x, scale * flip_y)
 
-        video_width = min(width, height) * 0.72
-        video_height = video_width * 9 / 16
-        ctx.set_source_rgba(1.0, 1.0, 1.0, 1.0)
-        ctx.rectangle(-video_width / 2, -video_height / 2, video_width, video_height)
-        ctx.fill_preserve()
-        ctx.set_source_rgba(0.6, 0.6, 0.65, 1.0)
-        ctx.set_line_width(1.0)
-        ctx.stroke()
-
-        arrow_shaft_half_width = video_width * 0.08
-        arrow_head_height = video_height * 0.26
-        arrow_top = -video_height / 2 + video_height * 0.12
-        arrow_bottom = video_height / 2 - video_height * 0.16
-
-        ctx.set_source_rgba(0.27, 0.58, 0.88, 1.0)
-        ctx.move_to(0, arrow_top)
-        ctx.line_to(arrow_shaft_half_width, arrow_top + arrow_head_height)
-        ctx.line_to(arrow_shaft_half_width * 0.45, arrow_top + arrow_head_height)
-        ctx.line_to(arrow_shaft_half_width * 0.45, arrow_bottom)
-        ctx.line_to(-arrow_shaft_half_width * 0.45, arrow_bottom)
-        ctx.line_to(-arrow_shaft_half_width * 0.45, arrow_top + arrow_head_height)
-        ctx.line_to(-arrow_shaft_half_width, arrow_top + arrow_head_height)
-        ctx.close_path()
-        ctx.fill()
-
-        accent_radius = video_width * 0.07
-        accent_cx = video_width * 0.24
-        accent_cy = -video_height * 0.2
-        ctx.set_source_rgba(0.95, 0.78, 0.22, 1.0)
-        ctx.arc(accent_cx, accent_cy, accent_radius, 0, 2 * math.pi)
-        ctx.fill()
-
-        bar_width = video_width * 0.18
-        bar_height = video_height * 0.12
-        bar_x = -video_width / 2 + video_width * 0.1
-        bar_y = video_height / 2 - video_height * 0.18
-        ctx.set_source_rgba(0.34, 0.8, 0.62, 1.0)
-        ctx.rectangle(bar_x, bar_y - bar_height, bar_width, bar_height)
-        ctx.fill()
-
+        Gdk.cairo_set_source_pixbuf(ctx, pixbuf, -image_width / 2, -image_height / 2)
+        ctx.paint()
+        ctx.restore()
         ctx.restore()
 
     def set_original_dimensions(self, width, height):
