@@ -247,14 +247,6 @@ class TransformRow(Gtk.Box):
         from gi.repository import Gdk, GdkPixbuf
 
         ctx.save()
-        ctx.set_source_rgba(0.95, 0.95, 0.97, 1.0)
-        ctx.rectangle(0, 0, width, height)
-        ctx.fill()
-
-        ctx.set_source_rgba(0.75, 0.75, 0.8, 1.0)
-        ctx.set_line_width(1.0)
-        ctx.rectangle(0.5, 0.5, width - 1.0, height - 1.0)
-        ctx.stroke()
 
         image_path = "/tmp/foobar.png"
         try:
@@ -269,16 +261,28 @@ class TransformRow(Gtk.Box):
             ctx.restore()
             return
 
-        scale = min(width / image_width, height / image_height)
+        available_width = max(width - 1.0, 1.0)
+        available_height = max(height - 1.0, 1.0)
+
+        rotation = self.get_rotation() % 360
+        angle = math.radians(rotation)
+        abs_cos = abs(math.cos(angle))
+        abs_sin = abs(math.sin(angle))
+
+        denom_width = abs_cos * image_width + abs_sin * image_height
+        denom_height = abs_sin * image_width + abs_cos * image_height
+        if not denom_width or not denom_height:
+            ctx.restore()
+            return
+
+        scale = min(available_width / denom_width, available_height / denom_height)
         if scale <= 0:
             ctx.restore()
             return
 
         ctx.save()
         ctx.translate(width / 2, height / 2)
-
-        rotation = self.get_rotation()
-        ctx.rotate(math.radians(rotation))
+        ctx.rotate(angle)
 
         flip_x = -1 if self.get_flip_horizontal() else 1
         flip_y = -1 if self.get_flip_vertical() else 1
