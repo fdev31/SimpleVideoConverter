@@ -32,7 +32,7 @@ from ..utils import (
     get_video_duration,
     get_video_properties,
 )
-from .widgets import AudioBitrateScale, HintsLabel, ScalingFactorScale, TransformRow
+from .widgets import AudioBitrateScale, HintsLabel, TransformRow
 
 
 class VideoConverterWindow(Adw.ApplicationWindow):
@@ -302,11 +302,6 @@ class VideoConverterWindow(Adw.ApplicationWindow):
         settings_box.append(advanced_group)
         advanced_expander.set_expanded(False)
 
-        # Rotation and Flip
-        # transform_row_container = Adw.ActionRow()
-        self.transform_row = TransformRow()
-        self.transform_row.connect_changed(self._on_settings_changed)
-        advanced_expander.add_row(self.transform_row)
 
         passes_expander = Adw.SpinRow(title="Number of Passes")
         passes_expander.set_adjustment(Gtk.Adjustment.new(2, 2, 3, 1, 1, 0))
@@ -317,6 +312,12 @@ class VideoConverterWindow(Adw.ApplicationWindow):
         )
         self.passes_expander = passes_expander
         advanced_expander.add_row(passes_expander)
+
+        # Rotation and Flip
+        # transform_row_container = Adw.ActionRow()
+        self.transform_row = TransformRow()
+        self.transform_row.connect_changed(self._on_settings_changed)
+        advanced_expander.add_row(self.transform_row)
 
         # Track selection
         self.tracks_group = Adw.PreferencesGroup(title="Sound &amp; Subtitles tracks")
