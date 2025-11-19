@@ -374,7 +374,7 @@ class HintsLabel(Gtk.Box):
         time_str = format_duration(
             self.estimated_compression_time + 5
         )  # Add a 4s saving overhead
-        speed_text = f"Speed: {speed_rating} (ETA: <{time_str} each pass)"
+        speed_text = f"Speed: {speed_rating} (estimated <{time_str}/pass)"
         self.speed_label.set_label(speed_text)
 
         speed_rating_lower = speed_rating.lower()
