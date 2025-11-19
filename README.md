@@ -68,7 +68,7 @@ Everything expanded:
 
 4. Run the application:
    ```bash
-   python main.py
+   video-converter
    ```
 
 ## Usage
