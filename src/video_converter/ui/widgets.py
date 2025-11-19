@@ -57,7 +57,7 @@ class TransformRow(Adw.ExpanderRow):
         controls_box = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=12)
         controls_box.set_valign(Gtk.Align.CENTER)
 
-        rotation_label = Gtk.Label(label="Rotation", xalign=0)
+        rotation_label = Gtk.Label(label="<b>Rotate</b>", use_markup=True, xalign=0)
         rotation_label.add_css_class("caption")
         controls_box.append(rotation_label)
 
@@ -83,7 +83,7 @@ class TransformRow(Adw.ExpanderRow):
         rotation_box.append(self.rotation_180_button)
         controls_box.append(rotation_box)
 
-        flip_label = Gtk.Label(label="Flip", xalign=0)
+        flip_label = Gtk.Label(label="<b>Flip</b>", xalign=0, use_markup=True)
         flip_label.add_css_class("caption")
         controls_box.append(flip_label)
 
@@ -491,6 +491,8 @@ class ScalingFactorScale(Gtk.Box):
         self.height_entry.connect("value-changed", self._on_height_changed)
 
         content_box = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=12)
+        scale_title = Gtk.Label(label="<b>Shrinking</b>", xalign=0, use_markup=True)
+        content_box.append(scale_title)
 
         dimensions_box = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL, spacing=12)
         dimensions_box.set_homogeneous(True)

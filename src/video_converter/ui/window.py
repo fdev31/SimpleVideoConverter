@@ -252,7 +252,7 @@ class VideoConverterWindow(Adw.ApplicationWindow):
 
         container_model = Gtk.StringList.new(["auto"] + get_sorted_container_list())
         self.container_combo = Adw.ComboRow(
-            model=container_model, title="Container Format"
+            model=container_model, title="File (aka Container) Format"
         )
         self.container_combo.set_subtitle("")
         self.container_combo.set_tooltip_text(
@@ -265,7 +265,9 @@ class VideoConverterWindow(Adw.ApplicationWindow):
 
         codec_list = HW_ACCEL["cpu"]["codecs"]
         codec_model = self._get_codec_list(codec_list)
-        self.codec_combo = Adw.ComboRow(model=codec_model, title="Video Codec")
+        self.codec_combo = Adw.ComboRow(
+            model=codec_model, title="Video Codec (compression type)"
+        )
         expression = Gtk.PropertyExpression.new(ListItem, None, "display")
         self.codec_combo.set_expression(expression)
         initial_props = get_codec_properties(codec_list[0])
