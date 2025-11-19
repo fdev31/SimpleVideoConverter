@@ -1,7 +1,7 @@
 Tickets
 =======
 
-:total-count: 2
+:total-count: 4
 
 --------------------------------------------------------------------------------
 
@@ -30,3 +30,23 @@ Fix the scale refactor
 :priority: 0
 
 Could not read video properties: 'ScalingFactorScale' object has no attribute 'width_entry'
+
+--------------------------------------------------------------------------------
+
+Name for the project: alineart ?
+================================
+
+:bugid: 3
+:created: 2025-11-20T00:43:30
+:priority: 0
+
+- alineo ? (align-video) # KO: taken
+
+--------------------------------------------------------------------------------
+
+Improve ffmpegthumbnailer missing use case
+==========================================
+
+:bugid: 4
+:created: 2025-11-20T00:48:32
+:priority: 0
