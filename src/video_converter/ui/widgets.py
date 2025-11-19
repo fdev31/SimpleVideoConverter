@@ -83,6 +83,8 @@ class TransformRow(Adw.ExpanderRow):
         rotation_box.append(self.rotation_180_button)
         controls_box.append(rotation_box)
 
+        controls_box.append(Gtk.Separator(orientation=Gtk.Orientation.HORIZONTAL))
+
         flip_label = Gtk.Label(label="<b>Flip</b>", xalign=0, use_markup=True)
         flip_label.add_css_class("caption")
         controls_box.append(flip_label)
