@@ -54,8 +54,6 @@ class TransformRow(Adw.ExpanderRow):
         preview_box.append(preview_frame)
         main_box.append(preview_box)
 
-        main_box.append(Gtk.Separator(orientation=Gtk.Orientation.VERTICAL))
-
         controls_box = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=12)
         controls_box.set_valign(Gtk.Align.CENTER)
 
