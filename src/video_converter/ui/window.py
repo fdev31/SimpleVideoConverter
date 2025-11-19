@@ -1,8 +1,3 @@
-import gi
-
-gi.require_version("Gtk", "4.0")
-gi.require_version("Adw", "1")
-
 import subprocess
 import sys
 import threading
@@ -53,6 +48,7 @@ class VideoConverterWindow(Adw.ApplicationWindow):
         self.estimated_size_bytes = 0
         self.mode_keys = list([e.name for e in EncodingModes])
         self.updating_ui = False
+        self.track_widgets = []
 
         # Store video properties for calculations
         self.video_width = 1920
@@ -81,6 +77,7 @@ class VideoConverterWindow(Adw.ApplicationWindow):
         self.action_button = Gtk.Button()
         self.action_button.connect("clicked", self.on_action_clicked)
         self.set_action_mode(True)
+
         header_bar.pack_start(self.action_button)
 
         # Progress bar in header (center-left area)
@@ -173,12 +170,6 @@ class VideoConverterWindow(Adw.ApplicationWindow):
             Gtk.Image.new_from_icon_name("applications-science-symbolic")
         )
         files_group.add(encoding_mode_action_row)
-
-        self.scale_factor_scale = ScalingFactorScale()
-        self.scale_factor_scale.scale.connect(
-            "value-changed", self._on_settings_changed
-        )
-        files_group.add(self.scale_factor_scale)
 
         # Hints label (quality/speed)
         self.hints_label = HintsLabel()
@@ -314,9 +305,8 @@ class VideoConverterWindow(Adw.ApplicationWindow):
         # Rotation and Flip
         # transform_row_container = Adw.ActionRow()
         self.transform_row = TransformRow()
-        # transform_row_container.add_suffix(self.transform_row)
-        # transform_row_container.set_activatable_widget(self.transform_row)
-        self.scale_factor_scale.scale_row.add_row(self.transform_row)
+        self.transform_row.connect_changed(self._on_settings_changed)
+        advanced_expander.add_row(self.transform_row)
 
         passes_expander = Adw.SpinRow(title="Number of Passes")
         passes_expander.set_adjustment(Gtk.Adjustment.new(2, 2, 3, 1, 1, 0))
@@ -330,7 +320,6 @@ class VideoConverterWindow(Adw.ApplicationWindow):
 
         # Track selection
         self.tracks_group = Adw.PreferencesGroup(title="Sound &amp; Subtitles tracks")
-        self.track_widgets = []
         self.no_tracks_row = Adw.ActionRow(
             title="Load a video to see available tracks."
         )
@@ -437,15 +426,47 @@ class VideoConverterWindow(Adw.ApplicationWindow):
             try:
                 codec, width, height, fps, streams = get_video_properties(path)
                 self.video_codec = codec
-                if width and height and fps:
+
+                if width:
                     self.video_width = width
+                if height:
                     self.video_height = height
+                if fps:
                     self.video_fps = fps
-                    self.scale_factor_scale.set_original_dimensions(width, height)
+
+                GLib.idle_add(self.transform_row.set_original_dimensions, width, height)
 
                 duration = get_video_duration(path)
                 if duration and duration > 0:
                     self.video_duration = duration
+                    subprocess.call(
+                        [
+                            "ffmpegthumbnailer",
+                            "-i",
+                            path,
+                            "-o",
+                            "/tmp/thumbnail.png",
+                            "-s",
+                            "196",
+                        ]
+                    )
+                    # make a 256px thumbnail at half the duration using ffmpeg, save in /tmp/foobar.png
+                    # subprocess.call(
+                    #     [
+                    #         "ffmpeg",
+                    #         "-y",
+                    #         "-i",
+                    #         path,
+                    #         "-ss",
+                    #         str(int(duration / 2)),
+                    #         "-vframes",
+                    #         "1",
+                    #         "-s",
+                    #         f"{width // 50}x{height // 50}",
+                    #         "/tmp/thumbnail.png",
+                    #     ]
+                    # )
+                    self.transform_row.set_preview_image("/tmp/thumbnail.png")
 
                 # Populate track selection UI
                 if not streams:
@@ -616,7 +637,7 @@ class VideoConverterWindow(Adw.ApplicationWindow):
             )
 
             # Update hints
-            scale_factor = self.scale_factor_scale.get_value()
+            scale_factor = self.transform_row.scale_widget.get_value()
 
             self.hints_label.update_quality_speed(
                 video_bitrate,
@@ -732,12 +753,12 @@ class VideoConverterWindow(Adw.ApplicationWindow):
     def set_action_mode(self, convert=True):
         if convert:
             self.action_button.set_label("Start conversion")
-            self.action_button.set_icon_name("media-playback-start-symbolic")
+            # self.action_button.set_icon_name("media-playback-start-symbolic")
             self.action_button.set_tooltip_text("Start the video conversion process.")
             self.action_button.add_css_class("suggested-action")
         else:
             self.action_button.set_label("Cancel")
-            self.action_button.set_icon_name("process-stop-symbolic")
+            # self.action_button.set_icon_name("process-stop-symbolic")
             self.action_button.set_tooltip_text("Cancel the ongoing conversion.")
 
     def on_action_clicked(self, widget):
@@ -980,7 +1001,7 @@ class VideoConverterWindow(Adw.ApplicationWindow):
             raise ValueError("Could not determine video duration")
 
         audio_bitrate = self.audio_scale.get_value()
-        scale_factor = self.scale_factor_scale.get_value()
+        scale_factor = self.transform_row.scale_widget.get_value()
         quality = (
             self.quality_combo.get_selected_item().get_string()
             if self.quality_combo.get_selected_item()
@@ -1024,9 +1045,8 @@ class VideoConverterWindow(Adw.ApplicationWindow):
             selected = widget.get_selected_item().get_string().lower()
             track_options[stream_index] = selected
 
-        flip_horizontal = self.transform_row.get_flip_vertical()
+        flip_horizontal = self.transform_row.get_flip_horizontal()
         flip_vertical = self.transform_row.get_flip_vertical()
-
         rotation_angle = self.transform_row.get_rotation()
 
         return {

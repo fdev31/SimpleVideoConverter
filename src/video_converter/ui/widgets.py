@@ -3,8 +3,6 @@ import math
 import gi
 from gi.repository import Adw, Gtk
 
-gi.require_version("Gtk", "4.0")
-
 from ..constants import (
     BLOCK_SIZE,
     CODEC_BPP_RATINGS,
@@ -22,11 +20,19 @@ from ..utils import (
 )
 
 
-class TransformRow(Gtk.Box):
-    """Custom widget for video transform controls (scale, rotation, flip)."""
+class TransformRow(Adw.ExpanderRow):
+    """Widget for rotation and flip controls with a simple preview."""
 
     def __init__(self):
-        super().__init__(orientation=Gtk.Orientation.HORIZONTAL, spacing=24)
+        super().__init__()
+        self.set_title("Transform")
+        self.set_icon_name("transform-scale-symbolic")
+        self._current_preview_path = None
+        self._next_preview_path = None
+
+        main_box = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL, spacing=24)
+        self.set_child(main_box)
+
         self.set_halign(Gtk.Align.FILL)
         self.set_margin_top(12)
         self.set_margin_bottom(12)
@@ -35,100 +41,27 @@ class TransformRow(Gtk.Box):
 
         self.original_width = 1920
         self.original_height = 1080
-        self.updating = False
-
-        # --- Left Column: Scaling and Dimensions ---
-        left_box = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=12)
-        left_box.set_hexpand(True)
-        self.append(left_box)
-
-        scale_label = Gtk.Label(xalign=0)
-        scale_label.set_markup("<b>Scale</b>")
-        left_box.append(scale_label)
-
-        self.adjustment = Gtk.Adjustment(
-            lower=0.0, upper=1.0, step_increment=0.01, page_increment=0.1, value=1.0
-        )
-        self.scale = Gtk.Scale(
-            adjustment=self.adjustment, orientation=Gtk.Orientation.HORIZONTAL, digits=2
-        )
-        self.scale.set_tooltip_text(
-            "Adjust the video scaling factor. 1.0 is original size."
-        )
-        self.scale.set_draw_value(True)
-        self.scale.set_value_pos(Gtk.PositionType.RIGHT)
-        self.scale.set_hexpand(True)
-        self.scale.connect("value-changed", self._on_scale_changed)
-
-        common_scales = [0.25, 0.5, 0.75, 1.0]
-        for scale in common_scales:
-            self.scale.add_mark(scale, Gtk.PositionType.BOTTOM, f"{int(scale * 100)}%")
-        left_box.append(self.scale)
-
-        scale_button_box = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL, spacing=12)
-        scale_button_box.set_homogeneous(True)
-        presets = [
-            ("10%", 0.1),
-            ("25%", 0.25),
-            ("33%", 0.33),
-            ("50%", 0.5),
-            ("66%", 0.66),
-            ("75%", 0.75),
-            ("100%", 1.0),
-        ]
-        for label, value in presets:
-            btn = Gtk.Button(label=label)
-            btn.connect("clicked", lambda w, v=value: self.adjustment.set_value(v))
-            scale_button_box.append(btn)
-        left_box.append(scale_button_box)
-
-        dimensions_box = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL, spacing=12)
-        dimensions_box.set_homogeneous(True)
-        left_box.append(dimensions_box)
-
-        width_box = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=3)
-        width_label = Gtk.Label(label="Width (px)", xalign=0)
-        width_label.add_css_class("caption")
-        self.width_adjustment = Gtk.Adjustment.new(
-            self.original_width, 1, 4096, 1, 10, 0
-        )
-        self.width_entry = Gtk.SpinButton(adjustment=self.width_adjustment, digits=0)
-        self.width_entry.connect("value-changed", self._on_width_changed)
-        width_box.append(width_label)
-        width_box.append(self.width_entry)
-        dimensions_box.append(width_box)
-
-        height_box = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=3)
-        height_label = Gtk.Label(label="Height (px)", xalign=0)
-        height_label.add_css_class("caption")
-        self.height_adjustment = Gtk.Adjustment.new(
-            self.original_height, 1, 4096, 1, 10, 0
-        )
-        self.height_entry = Gtk.SpinButton(adjustment=self.height_adjustment, digits=0)
-        self.height_entry.connect("value-changed", self._on_height_changed)
-        height_box.append(height_label)
-        height_box.append(self.height_entry)
-        dimensions_box.append(height_box)
-
-        self.append(Gtk.Separator(orientation=Gtk.Orientation.VERTICAL))
-
-        # --- Right Column: Preview, Rotation, and Flip ---
-        right_box = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=12)
-        right_box.set_valign(Gtk.Align.CENTER)
-        self.append(right_box)
+        self._change_handlers: list[callable] = []
 
         preview_box = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=6)
-        preview_label = Gtk.Label(label="Preview", xalign=0.5)
-        preview_label.add_css_class("caption")
-        preview_box.append(preview_label)
+        preview_box.set_valign(Gtk.Align.CENTER)
 
         self.preview = Gtk.DrawingArea()
-        self.preview.set_content_width(96)
-        self.preview.set_content_height(96)
+        self.preview.set_content_width(196)
+        self.preview.set_content_height(196)
         self.preview.set_draw_func(self._on_preview_draw)
         preview_frame = Gtk.Frame(child=self.preview)
         preview_box.append(preview_frame)
-        right_box.append(preview_box)
+        main_box.append(preview_box)
+
+        main_box.append(Gtk.Separator(orientation=Gtk.Orientation.VERTICAL))
+
+        controls_box = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=12)
+        controls_box.set_valign(Gtk.Align.CENTER)
+
+        rotation_label = Gtk.Label(label="Rotation", xalign=0)
+        rotation_label.add_css_class("caption")
+        controls_box.append(rotation_label)
 
         rotation_box = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL, spacing=0)
         rotation_box.add_css_class("linked")
@@ -150,7 +83,11 @@ class TransformRow(Gtk.Box):
         rotation_box.append(self.rotation_left_button)
         rotation_box.append(self.rotation_right_button)
         rotation_box.append(self.rotation_180_button)
-        right_box.append(rotation_box)
+        controls_box.append(rotation_box)
+
+        flip_label = Gtk.Label(label="Flip", xalign=0)
+        flip_label.add_css_class("caption")
+        controls_box.append(flip_label)
 
         flip_box = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL, spacing=0)
         flip_box.add_css_class("linked")
@@ -164,9 +101,15 @@ class TransformRow(Gtk.Box):
         self.flip_vertical_button.set_tooltip_text("Flip vertically")
         flip_box.append(self.flip_horizontal_button)
         flip_box.append(self.flip_vertical_button)
-        right_box.append(flip_box)
+        controls_box.append(flip_box)
 
-        # --- Connect Signals ---
+        main_box.append(controls_box)
+
+        main_box.append(Gtk.Separator(orientation=Gtk.Orientation.VERTICAL))
+
+        self.scale_widget = ScalingFactorScale()
+        main_box.append(self.scale_widget)
+
         for button in (
             self.rotation_none_button,
             self.rotation_left_button,
@@ -179,24 +122,32 @@ class TransformRow(Gtk.Box):
 
         self._update_preview()
 
+    def connect_changed(self, callback):
+        """Register a callback invoked when any transform option changes."""
+        if callable(callback):
+            self._change_handlers.append(callback)
+            self.scale_widget.scale.connect("value-changed", callback)
+
+    def _notify_changed(self):
+        for handler in self._change_handlers:
+            handler()
+
     def _on_rotation_button_toggled(self, button: Gtk.ToggleButton) -> None:
         if not button.get_active():
             return
         self._update_preview()
+        self._notify_changed()
 
     def _on_flip_button_toggled(self, button: Gtk.ToggleButton) -> None:
         self._update_preview()
+        self._notify_changed()
 
     def _update_preview(self) -> None:
         if self.preview is not None:
             self.preview.queue_draw()
 
     def get_rotation(self) -> int:
-        """Get the selected rotation angle.
-
-        Returns:
-            Rotation angle: 0, 270, 90, or 180 degrees.
-        """
+        """Get the selected rotation angle."""
         if self.rotation_left_button.get_active():
             return 270
         if self.rotation_right_button.get_active():
@@ -206,11 +157,7 @@ class TransformRow(Gtk.Box):
         return 0
 
     def set_rotation(self, angle: int) -> None:
-        """Set the rotation angle.
-
-        Args:
-            angle: Rotation angle (0, 270, 90, or 180).
-        """
+        """Set the rotation angle."""
         button_map = {
             0: self.rotation_none_button,
             270: self.rotation_left_button,
@@ -221,38 +168,51 @@ class TransformRow(Gtk.Box):
         button.set_active(True)
 
     def get_flip_horizontal(self) -> bool:
-        """Get horizontal flip state."""
         return self.flip_horizontal_button.get_active()
 
     def set_flip_horizontal(self, flipped: bool) -> None:
-        """Set horizontal flip state."""
         self.flip_horizontal_button.set_active(flipped)
 
     def get_flip_vertical(self) -> bool:
-        """Get vertical flip state."""
         return self.flip_vertical_button.get_active()
 
     def set_flip_vertical(self, flipped: bool) -> None:
-        """Set vertical flip state."""
         self.flip_vertical_button.set_active(flipped)
 
     def reset(self) -> None:
-        """Reset all transform controls to default state."""
-        self.set_original_dimensions(self.original_width, self.original_height)
         self.rotation_none_button.set_active(True)
         self.flip_horizontal_button.set_active(False)
         self.flip_vertical_button.set_active(False)
+        self._update_preview()
+        self._notify_changed()
+
+    def set_original_dimensions(self, width: int, height: int) -> None:
+        self.original_width = max(1, int(width))
+        self.original_height = max(1, int(height))
+        self.scale_widget.set_original_dimensions(width, height)
+        self._update_preview()
+
+    def set_preview_image(self, image_path):
+        if image_path != self._current_preview_path:
+            self._next_preview_path = image_path
 
     def _on_preview_draw(self, area, ctx, width, height) -> None:
         from gi.repository import Gdk, GdkPixbuf
 
         ctx.save()
 
-        image_path = "/tmp/foobar.png"
         try:
-            pixbuf = GdkPixbuf.Pixbuf.new_from_file(image_path)
+            if self._current_preview_path != self._next_preview_path:
+                self._preview_pixbuf = GdkPixbuf.Pixbuf.new_from_file(
+                    self._next_preview_path
+                )
+                self._current_preview_path = self._next_preview_path = None
         except Exception:
             ctx.restore()
+            return
+
+        pixbuf = getattr(self, "_preview_pixbuf", None)
+        if not pixbuf:
             return
 
         image_width = pixbuf.get_width()
@@ -292,68 +252,6 @@ class TransformRow(Gtk.Box):
         ctx.paint()
         ctx.restore()
         ctx.restore()
-
-    def set_original_dimensions(self, width, height):
-        """Set the original video dimensions."""
-        self.original_width = width
-        self.original_height = height
-        self.updating = True
-        self.width_entry.set_value(width)
-        self.height_entry.set_value(height)
-        self.adjustment.set_value(1.0)
-        self.updating = False
-
-    def _on_scale_changed(self, widget):
-        """Update width/height when scale factor changes."""
-        if self.updating:
-            return
-        self.updating = True
-        factor = self.adjustment.get_value()
-        new_width = max(1, int(self.original_width * factor))
-        new_height = max(1, int(self.original_height * factor))
-        self.width_entry.set_value(new_width)
-        self.height_entry.set_value(new_height)
-        self.updating = False
-
-    def _on_width_changed(self, widget):
-        """Update height and scaling factor when width changes."""
-        if self.updating:
-            return
-        try:
-            new_width = int(self.width_entry.get_value())
-            if new_width > 0 and self.original_width > 0:
-                self.updating = True
-                factor = new_width / self.original_width
-                new_height = max(1, int(self.original_height * factor))
-                self.height_entry.set_value(new_height)
-                self.adjustment.set_value(max(0.0, min(1.0, factor)))
-                self.updating = False
-        except ValueError:
-            pass
-
-    def _on_height_changed(self, widget):
-        """Update width and scaling factor when height changes."""
-        if self.updating:
-            return
-        try:
-            new_height = int(self.height_entry.get_value())
-            if new_height > 0 and self.original_height > 0:
-                self.updating = True
-                factor = new_height / self.original_height
-                new_width = max(1, int(self.original_width * factor))
-                self.width_entry.set_value(new_width)
-                self.adjustment.set_value(max(0.0, min(1.0, factor)))
-                self.updating = False
-        except ValueError:
-            pass
-
-    def get_scale_factor(self):
-        """Get the current scaling factor value."""
-        return self.adjustment.get_value()
-
-    def set_scale_factor(self, value):
-        """Set the scaling factor value."""
-        self.adjustment.set_value(float(value))
 
 
 class HintsLabel(Gtk.Box):
@@ -555,24 +453,16 @@ class AudioBitrateScale(Gtk.Box):
 
 
 class ScalingFactorScale(Gtk.Box):
-    """Custom widget for scaling factor slider."""
+    """Custom widget for scaling factor slider and dimension controls."""
 
     def __init__(self):
         super().__init__(
             orientation=Gtk.Orientation.VERTICAL,
             spacing=12,
-            margin_top=12,
         )
         self.original_width = 1920
         self.original_height = 1080
         self.updating = False
-
-        self.scale_group = Adw.PreferencesGroup()
-        self.scale_row = Adw.ExpanderRow(
-            title="Scale &amp; rotation", icon_name="transform-scale-symbolic"
-        )
-        self.scale_group.add(self.scale_row)
-        self.append(self.scale_group)
 
         self.adjustment = Gtk.Adjustment(
             lower=0.0, upper=1.0, step_increment=0.01, page_increment=0.1, value=1.0
@@ -588,19 +478,70 @@ class ScalingFactorScale(Gtk.Box):
         self.scale.set_hexpand(True)
         self.scale.connect("value-changed", self._on_scale_changed)
 
-        common_scales = [0.25, 0.5, 0.75, 1.0]
-        for scale in common_scales:
-            self.scale.add_mark(scale, Gtk.PositionType.BOTTOM, f"{int(scale * 100)}%")
+        for mark in [0.25, 0.5, 0.75, 1.0]:
+            self.scale.add_mark(mark, Gtk.PositionType.BOTTOM, f"{int(mark * 100)}%")
 
+        self.width_adjustment = Gtk.Adjustment.new(
+            self.original_width, 1, self.original_width, 1, 10, 0
+        )
+        self.height_adjustment = Gtk.Adjustment.new(
+            self.original_height, 1, self.original_height, 1, 10, 0
+        )
+        self.width_entry = Gtk.SpinButton(adjustment=self.width_adjustment, digits=0)
+        self.width_entry.connect("value-changed", self._on_width_changed)
+        self.height_entry = Gtk.SpinButton(adjustment=self.height_adjustment, digits=0)
+        self.height_entry.connect("value-changed", self._on_height_changed)
 
+        content_box = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=12)
+
+        dimensions_box = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL, spacing=12)
+        dimensions_box.set_homogeneous(True)
+
+        width_box = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=3)
+        width_label = Gtk.Label(label="Width (px)", xalign=0)
+        width_label.add_css_class("caption")
+        width_box.append(width_label)
+        width_box.append(self.width_entry)
+        dimensions_box.append(width_box)
+
+        height_box = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=3)
+        height_label = Gtk.Label(label="Height (px)", xalign=0)
+        height_label.add_css_class("caption")
+        height_box.append(height_label)
+        height_box.append(self.height_entry)
+        dimensions_box.append(height_box)
+
+        content_box.append(dimensions_box)
+        content_box.append(self.scale)
+
+        scale_button_box = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL, spacing=12)
+        scale_button_box.set_homogeneous(True)
+        presets = [
+            ("10%", 0.1),
+            ("25%", 0.25),
+            ("33%", 0.33),
+            ("50%", 0.5),
+            ("66%", 0.66),
+            ("75%", 0.75),
+            ("100%", 1.0),
+        ]
+        for label, value in presets:
+            btn = Gtk.Button(label=label)
+            btn.connect("clicked", lambda w, v=value: self.adjustment.set_value(v))
+            scale_button_box.append(btn)
+        content_box.append(scale_button_box)
+        self.append(content_box)
 
     def set_original_dimensions(self, width, height):
         """Set the original video dimensions."""
-        self.original_width = width
-        self.original_height = height
+        self.original_width = max(1, int(width))
+        self.original_height = max(1, int(height))
+
         self.updating = True
-        self.width_entry.set_value(width)
-        self.height_entry.set_value(height)
+        self.width_adjustment.set_upper(self.original_width)
+        self.height_adjustment.set_upper(self.original_height)
+        self.width_entry.set_value(self.original_width)
+        self.height_entry.set_value(self.original_height)
         self.adjustment.set_value(1.0)
         self.updating = False
 
@@ -608,45 +549,46 @@ class ScalingFactorScale(Gtk.Box):
         """Update width/height when scale factor changes."""
         if self.updating:
             return
-        self.updating = True
-        factor = self.adjustment.get_value()
+        factor = max(
+            self.adjustment.get_lower(),
+            min(self.adjustment.get_upper(), self.adjustment.get_value()),
+        )
         new_width = max(1, int(self.original_width * factor))
         new_height = max(1, int(self.original_height * factor))
+        self.updating = True
         self.width_entry.set_value(new_width)
         self.height_entry.set_value(new_height)
         self.updating = False
 
     def _on_width_changed(self, widget):
         """Update height and scaling factor when width changes."""
-        if self.updating:
+        if self.updating or self.original_width <= 0:
             return
-        try:
-            new_width = int(self.width_entry.get_value())
-            if new_width > 0 and self.original_width > 0:
-                self.updating = True
-                factor = new_width / self.original_width
-                new_height = max(1, int(self.original_height * factor))
-                self.height_entry.set_value(new_height)
-                self.adjustment.set_value(max(0.0, min(1.0, factor)))
-                self.updating = False
-        except ValueError:
-            pass
+        new_width = max(1, int(self.width_entry.get_value()))
+        new_width = min(new_width, self.original_width)
+        factor = new_width / self.original_width
+        new_height = max(1, int(self.original_height * factor))
+        self.updating = True
+        self.height_entry.set_value(new_height)
+        self.adjustment.set_value(
+            max(self.adjustment.get_lower(), min(self.adjustment.get_upper(), factor))
+        )
+        self.updating = False
 
     def _on_height_changed(self, widget):
         """Update width and scaling factor when height changes."""
-        if self.updating:
+        if self.updating or self.original_height <= 0:
             return
-        try:
-            new_height = int(self.height_entry.get_value())
-            if new_height > 0 and self.original_height > 0:
-                self.updating = True
-                factor = new_height / self.original_height
-                new_width = max(1, int(self.original_width * factor))
-                self.width_entry.set_value(new_width)
-                self.adjustment.set_value(max(0.0, min(1.0, factor)))
-                self.updating = False
-        except ValueError:
-            pass
+        new_height = max(1, int(self.height_entry.get_value()))
+        new_height = min(new_height, self.original_height)
+        factor = new_height / self.original_height
+        new_width = max(1, int(self.original_width * factor))
+        self.updating = True
+        self.width_entry.set_value(new_width)
+        self.adjustment.set_value(
+            max(self.adjustment.get_lower(), min(self.adjustment.get_upper(), factor))
+        )
+        self.updating = False
 
     def get_value(self):
         """Get the current scaling factor value."""
