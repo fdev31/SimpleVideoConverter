@@ -4,7 +4,10 @@ A modern video conversion application built with Python, GTK4, and Adwaita. This
 
 Linux only.
 
+Folded (as on startup):
 ![shot1](https://github.com/fdev31/SimpleVideoConverter/blob/main/shots/window_folded.png?raw=true)
+
+Everything expanded:
 ![shot2](https://github.com/fdev31/SimpleVideoConverter/blob/main/shots/window_expanded.png?raw=true)
 
 ## Features
