@@ -34,8 +34,7 @@ Everything expanded:
   - PyGObject
 - FFmpeg
 - ffmpegthumbnailer
-- GTK4
-- [Adwaita](https://gnome.pages.gitlab.gnome.org/libadwaita/)
+- [Adwaita](https://gnome.pages.gitlab.gnome.org/libadwaita/) / Gtk4
 
 ## Installation
 
