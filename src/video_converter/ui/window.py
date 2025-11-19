@@ -38,6 +38,7 @@ from .widgets import AudioBitrateScale, HintsLabel, TransformRow
 class VideoConverterWindow(Adw.ApplicationWindow):
     def __init__(self, app):
         super().__init__(application=app)
+        self.log = partial(GLib.idle_add, self._log_output)
         self.set_resizable(True)
         self.set_title("Video Converter")
         self.set_default_size(900, 1100)
@@ -728,7 +729,7 @@ class VideoConverterWindow(Adw.ApplicationWindow):
 
         dialog.save(self, None, on_response)
 
-    def log_output(self, message):
+    def _log_output(self, message):
         """Add message to output log."""
         buffer = self.output_text.get_buffer()
         buffer.insert(buffer.get_end_iter(), message + "\n")
@@ -1103,25 +1104,25 @@ class VideoConverterWindow(Adw.ApplicationWindow):
         return cmd
 
     def run_conversion(self):
-        """Run the conversion."""
+        """Run the conversion (started in a thread)."""
         try:
             self.is_encoding = True
             self.encoding_start_time = time.time()
 
-            GLib.idle_add(self.log_output, "=== Video Converter Started ===")
+            self.log("=== Video Converter Started ===")
 
             try:
                 subprocess.run(
                     ["ffmpeg", "-version"], check=False, capture_output=True, timeout=5
                 )
             except FileNotFoundError:
-                GLib.idle_add(self.log_output, "Error: ffmpeg is not installed")
+                self.log("Error: ffmpeg is not installed")
                 return
 
             try:
                 params = self.get_conversion_parameters()
             except ValueError as e:
-                GLib.idle_add(self.log_output, f"Error: {e}")
+                self.log(f"Error: {e}")
                 return
 
             input_file = params["input_file"]
@@ -1140,34 +1141,31 @@ class VideoConverterWindow(Adw.ApplicationWindow):
             is_vbr = params["is_vbr"]
             actual_passes = params["actual_passes"]
 
-            GLib.idle_add(self.log_output, f"Input: {input_file}")
-            GLib.idle_add(self.log_output, f"Output: {output_file}")
-            GLib.idle_add(self.log_output, f"Codec: {codec}")
-            GLib.idle_add(self.log_output, f"Container: {container}")
-            GLib.idle_add(self.log_output, f"Quality: {quality}")
-            GLib.idle_add(self.log_output, f"Scale factor: {scale_factor:.2f}")
+            self.log(f"Input: {input_file}")
+            self.log(f"Output: {output_file}")
+            self.log(f"Codec: {codec}")
+            self.log(f"Container: {container}")
+            self.log(f"Quality: {quality}")
+            self.log(f"Scale factor: {scale_factor:.2f}")
 
             if "re-encode" in [
                 track["widget"].get_selected_item().get_string().lower()
                 for track in self.track_widgets
                 if track["codec_type"] == "audio"
             ]:
-                GLib.idle_add(self.log_output, f"Audio codec: {audio_codec}")
-                GLib.idle_add(self.log_output, f"Audio bitrate: {audio_bitrate}kbps")
+                self.log(f"Audio codec: {audio_codec}")
+                self.log(f"Audio bitrate: {audio_bitrate}kbps")
 
-            GLib.idle_add(self.log_output, f"Video duration: {duration}s\n")
+            self.log(f"Video duration: {duration}s\n")
 
             if is_cq:
-                GLib.idle_add(self.log_output, f"Constant Quality level: {cq_level}")
+                self.log(f"Constant Quality level: {cq_level}")
             elif "size" in mode:
                 target_size = float(self.target_size_entry.get_text())
-                GLib.idle_add(self.log_output, f"Target size: {target_size}MB")
-                GLib.idle_add(
-                    self.log_output,
-                    f"Calculated video bitrate: {video_bitrate}kbps\n",
-                )
+                self.log(f"Target size: {target_size}MB")
+                self.log(f"Calculated video bitrate: {video_bitrate}kbps\n")
             else:
-                GLib.idle_add(self.log_output, f"Video bitrate: {video_bitrate}kbps\n")
+                self.log(f"Video bitrate: {video_bitrate}kbps\n")
             # Estimate final size for progress bar
             self.estimated_size_bytes = 0
             if "size" in mode:
@@ -1192,10 +1190,10 @@ class VideoConverterWindow(Adw.ApplicationWindow):
                 total_bitrate_kbps = video_bitrate + effective_audio_bitrate
                 self.estimated_size_bytes = (total_bitrate_kbps * 1000 / 8) * duration
 
-            GLib.idle_add(self.log_output, "Starting encoding...\n")
+            self.log("Starting encoding...\n")
 
             def run_ffmpeg_process(cmd):
-                GLib.idle_add(self.log_output, f"Running {' '.join(cmd)}")
+                self.log(f"Running {' '.join(cmd)}")
                 process = subprocess.Popen(
                     cmd, stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True
                 )
@@ -1247,9 +1245,8 @@ class VideoConverterWindow(Adw.ApplicationWindow):
                 if not self.is_encoding:
                     break
 
-                GLib.idle_add(
-                    self.log_output, f"--- Pass {pass_num} of {actual_passes} ---"
-                )
+                if pass_num is not None:
+                    self.log(f"--- Pass {pass_num} of {actual_passes} ---")
 
                 cmd = ffmpeg_command(pass_num=pass_num)
 
@@ -1261,22 +1258,20 @@ class VideoConverterWindow(Adw.ApplicationWindow):
 
                 if return_code != 0:
                     if self.is_encoding:  # Don't show error if canceled
-                        GLib.idle_add(
-                            self.log_output, f"Error at pass {pass_num}: {stderr}"
-                        )
+                        self.log(f"Error at pass {pass_num}: {stderr}")
                     return
 
             if not self.is_encoding:
-                GLib.idle_add(self.log_output, "\nEncoding canceled by user.")
+                self.log("\nEncoding canceled by user.")
                 return
 
             if output_file.is_file():
                 output_size = output_file.stat().st_size
                 output_size_mb = format_file_size(output_size)
 
-                GLib.idle_add(self.log_output, "\n=== Conversion Complete ===")
-                GLib.idle_add(self.log_output, f"Output file: {output_file}")
-                GLib.idle_add(self.log_output, f"Output size: {output_size_mb}MB")
+                self.log("\n=== Conversion Complete ===")
+                self.log(f"Output file: {output_file}")
+                self.log(f"Output size: {output_size_mb}MB")
 
                 def show_success():
                     self.progress_bar.set_fraction(1.0)
@@ -1292,7 +1287,7 @@ class VideoConverterWindow(Adw.ApplicationWindow):
                 GLib.idle_add(show_success)
 
             else:
-                GLib.idle_add(self.log_output, "Error: Output file was not created")
+                self.log("Error: Output file was not created")
 
                 def set_progress_error():
                     self.progress_bar.set_text("Error")
@@ -1300,7 +1295,7 @@ class VideoConverterWindow(Adw.ApplicationWindow):
                 GLib.idle_add(set_progress_error)
 
         except Exception as e:
-            GLib.idle_add(self.log_output, f"Exception: {e}")
+            self.log(f"Exception: {e}")
 
             def set_progress_exception():
                 self.progress_bar.set_text("Error")
