@@ -229,7 +229,7 @@ class VideoConverterWindow(Adw.ApplicationWindow):
         # Format & Quality section
         format_group = Adw.PreferencesGroup()
         format_expander = Adw.ExpanderRow(
-            title="Encoder",
+            title="Video Encoding",
             expanded=True,
             icon_name="video-x-generic-symbolic",
         )
@@ -239,7 +239,7 @@ class VideoConverterWindow(Adw.ApplicationWindow):
 
         self.hwaccels = ["cpu"] + get_hw_accels()
         hwaccel_model = Gtk.StringList.new(self.hwaccels)
-        self.hwaccel_combo = Adw.ComboRow(model=hwaccel_model, title="Hardware")
+        self.hwaccel_combo = Adw.ComboRow(model=hwaccel_model, title="Hardware to use")
         self.hwaccel_combo.set_subtitle(HW_ACCEL["cpu"]["description"])
         self.hwaccel_combo.set_tooltip_text(
             "Select a hardware acceleration method for video encoding and decoding."
@@ -251,7 +251,7 @@ class VideoConverterWindow(Adw.ApplicationWindow):
 
         container_model = Gtk.StringList.new(["auto"] + get_sorted_container_list())
         self.container_combo = Adw.ComboRow(
-            model=container_model, title="File (aka Container) Format"
+            model=container_model, title="File Format / Container"
         )
         self.container_combo.set_subtitle("")
         self.container_combo.set_tooltip_text(
@@ -282,9 +282,9 @@ class VideoConverterWindow(Adw.ApplicationWindow):
 
         quality_model = Gtk.StringList.new(["ultrafast", "medium", "slow", "veryslow"])
         self.quality_combo = Adw.ComboRow(
-            model=quality_model, title="Encoding Quality Preset"
+            model=quality_model, title="Encoding Speed Preset"
         )
-        self.quality_combo.set_subtitle("Affects encoding time and efficiency")
+        self.quality_combo.set_subtitle("Affects encoding time (quality tradeoff)")
         self.quality_combo.set_tooltip_text(
             "Select the encoding speed vs. quality trade-off. 'ultrafast' is quickest but least efficient, 'veryslow' is most efficient but takes much longer."
         )
@@ -567,7 +567,7 @@ class VideoConverterWindow(Adw.ApplicationWindow):
             selected_index = self.mode_combo.get_selected()
             mode = self.mode_keys[selected_index]
 
-            if "size" in mode:
+            if "size" in mode:  # target file size
                 target_size = self.target_size_entry.get_value()
                 video_bitrate = (
                     max(
@@ -580,7 +580,8 @@ class VideoConverterWindow(Adw.ApplicationWindow):
                     if self.video_duration > 0
                     else 0
                 )
-            elif EncodingModes.cq.name == mode:
+            elif EncodingModes.cq.name == mode:  # constant quality mode
+                # FIXME: this is a bit BS, shall be revised
                 # For CQ mode, use a standard reference bitrate (varies by codec)
                 codec = (
                     self.codec_combo.get_selected_item().value
@@ -597,7 +598,7 @@ class VideoConverterWindow(Adw.ApplicationWindow):
                     "mpeg4": 2500,
                 }
                 video_bitrate = ref_bitrates.get(props.get("family"), 2000)
-            else:
+            else:  # constant bitrate mode
                 video_bitrate = int(self.bitrate_entry.get_value())
 
             # Get codec and preset
