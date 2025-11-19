@@ -371,8 +371,10 @@ class HintsLabel(Gtk.Box):
         self.estimated_compression_time = (
             etime * video_duration
         ) / COMPUTER_SPEED_FACTOR
-        time_str = format_duration(self.estimated_compression_time)
-        speed_text = f"Speed: {speed_rating} (Est: {time_str})"
+        time_str = format_duration(
+            self.estimated_compression_time + 5
+        )  # Add a 4s saving overhead
+        speed_text = f"Speed: {speed_rating} (ETA: <{time_str} each pass)"
         self.speed_label.set_label(speed_text)
 
         speed_rating_lower = speed_rating.lower()
