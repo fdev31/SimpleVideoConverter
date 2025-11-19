@@ -66,8 +66,6 @@ Everything expanded:
      ```bash
      brew install ffmpeg
      ```
-   - On Windows:
-     Download from [FFmpeg's official website](https://ffmpeg.org/download.html) and add to PATH
 
 4. Run the application:
    ```bash
