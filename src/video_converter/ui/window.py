@@ -43,11 +43,9 @@ class VideoConverterWindow(Adw.ApplicationWindow):
         self.set_default_size(900, 1100)
         self.is_encoding = False
         self.encoding_thread = None
-        self.encoding_process = None
         self.progress_updater = None
         self.estimated_size_bytes = 0
         self.mode_keys = list([e.name for e in EncodingModes])
-        self.updating_ui = False
         self.track_widgets = []
 
         # Store video properties for calculations
@@ -453,22 +451,6 @@ class VideoConverterWindow(Adw.ApplicationWindow):
                             "196",
                         ]
                     )
-                    # make a 256px thumbnail at half the duration using ffmpeg, save in /tmp/foobar.png
-                    # subprocess.call(
-                    #     [
-                    #         "ffmpeg",
-                    #         "-y",
-                    #         "-i",
-                    #         path,
-                    #         "-ss",
-                    #         str(int(duration / 2)),
-                    #         "-vframes",
-                    #         "1",
-                    #         "-s",
-                    #         f"{width // 50}x{height // 50}",
-                    #         "/tmp/thumbnail.png",
-                    #     ]
-                    # )
                     self.transform_row.set_preview_image("/tmp/thumbnail.png")
 
                 # Populate track selection UI
@@ -1217,7 +1199,6 @@ class VideoConverterWindow(Adw.ApplicationWindow):
                 process = subprocess.Popen(
                     cmd, stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True
                 )
-                self.encoding_process = process
 
                 while process.poll() is None:
                     if not self.is_encoding:
@@ -1225,7 +1206,6 @@ class VideoConverterWindow(Adw.ApplicationWindow):
                         break
                     time.sleep(0.2)
 
-                self.encoding_process = None
                 try:
                     stdout, stderr = process.communicate(timeout=5)
                 except subprocess.TimeoutExpired:
@@ -1329,7 +1309,6 @@ class VideoConverterWindow(Adw.ApplicationWindow):
 
         finally:
             self.is_encoding = False
-            self.encoding_process = None
 
             def restore_ui():
                 self.set_action_mode(True)

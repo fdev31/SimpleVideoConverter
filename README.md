@@ -31,11 +31,11 @@ Everything expanded:
 ## Requirements
 
 - Python 3.8 or higher
+  - PyGObject
+- FFmpeg
+- ffmpegthumbnailer
 - GTK4
 - [Adwaita](https://gnome.pages.gitlab.gnome.org/libadwaita/)
-- FFmpeg (must be installed on your system)
-- Python dependencies:
-  - PyGObject
 
 ## Installation
 

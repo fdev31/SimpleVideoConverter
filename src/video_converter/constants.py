@@ -266,19 +266,6 @@ CQ_LEVELS_AV1_VP9_HW = {
 }
 
 # Common preset patterns
-VAAPI_COMPRESSION_PRESETS = {
-    "ultrafast": ["-compression_level", "0"],
-    "medium": ["-compression_level", "4"],
-    "slow": ["-compression_level", "7"],
-    "veryslow": ["-compression_level", "9"],
-}
-
-NVENC_H264_PRESETS = {
-    "ultrafast": ["-preset", "p1", "-tune", "hq", "-profile:v", "high"],
-    "medium": ["-preset", "p4", "-tune", "hq", "-profile:v", "high"],
-    "slow": ["-preset", "p6", "-tune", "hq", "-profile:v", "high"],
-    "veryslow": ["-preset", "p7", "-tune", "hq", "-profile:v", "high"],
-}
 
 NVENC_HEVC_AV1_PRESETS = {
     "ultrafast": ["-preset", "p1", "-tune", "hq"],

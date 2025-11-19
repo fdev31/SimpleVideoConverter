@@ -154,28 +154,11 @@ class TransformRow(Adw.ExpanderRow):
             return 180
         return 0
 
-    def set_rotation(self, angle: int) -> None:
-        """Set the rotation angle."""
-        button_map = {
-            0: self.rotation_none_button,
-            270: self.rotation_left_button,
-            90: self.rotation_right_button,
-            180: self.rotation_180_button,
-        }
-        button = button_map.get(angle, self.rotation_none_button)
-        button.set_active(True)
-
     def get_flip_horizontal(self) -> bool:
         return self.flip_horizontal_button.get_active()
 
-    def set_flip_horizontal(self, flipped: bool) -> None:
-        self.flip_horizontal_button.set_active(flipped)
-
     def get_flip_vertical(self) -> bool:
         return self.flip_vertical_button.get_active()
-
-    def set_flip_vertical(self, flipped: bool) -> None:
-        self.flip_vertical_button.set_active(flipped)
 
     def reset(self) -> None:
         self.rotation_none_button.set_active(True)
