@@ -1,0 +1,14 @@
+[Desktop Entry]
+Type=Application
+Exec=simple-video-converter %F
+Icon=video
+Name=SimpleVideoConverter
+Keywords[co]=Cunvertidore di furmatu ; Cudificatore video ;
+Keywords[de]=Formatconverter;Videoencoder;
+Keywords[es]=Convertidor de formato; codificador de vídeo;
+Keywords[nl]=Formaatconverter; Video-codering;
+Keywords[sv]=Formatkonverterare;Video-kodare;
+Keywords=Format Converter;Video Encoder;
+Categories=Utility;AudioVideo;Video;
+Comment=Hardware accelerated friendly video converter (using ffmpeg)
+MimeType=text/english;text/plain;text/x-python;
