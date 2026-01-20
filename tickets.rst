@@ -1,7 +1,7 @@
 Tickets
 =======
 
-:total-count: 4
+:total-count: 6
 
 --------------------------------------------------------------------------------
 
@@ -50,3 +50,27 @@ Improve ffmpegthumbnailer missing use case
 :bugid: 4
 :created: 2025-11-20T00:48:32
 :priority: 0
+
+--------------------------------------------------------------------------------
+
+Automatically set the encoding to a higher preset if no significant changes are seen
+====================================================================================
+
+:bugid: 5
+:created: 2025-11-20T01:02:16
+:priority: 0
+
+--------------------------------------------------------------------------------
+
+Add "icon" next to Shrink
+=========================
+
+:bugid: 6
+:created: 2025-11-20T01:07:08
+:priority: 0
+
+- 4k
+- FHD
+- HD
+- SD
+- ... QSD... ?
